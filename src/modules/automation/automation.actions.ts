@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
@@ -124,6 +125,7 @@ registerActions([
   }),
   defineAction({
     name: 'automationRule.create',
+    place: inputPlace,
     area: 'automation',
     kind: 'write',
     summary:
@@ -138,6 +140,7 @@ registerActions([
   }),
   defineAction({
     name: 'automationRule.update',
+    place: inputPlace,
     area: 'automation',
     kind: 'write',
     summary: 'Change an automation rule: any of its name, trigger, conditions, actions or state',
@@ -158,6 +161,7 @@ registerActions([
   }),
   defineAction({
     name: 'automationRule.toggle',
+    place: inputPlace,
     area: 'automation',
     kind: 'write',
     summary: 'Switch an automation rule on or off',
@@ -170,6 +174,7 @@ registerActions([
   }),
   defineAction({
     name: 'automationRule.delete',
+    place: inputPlace,
     destructive: true,
     area: 'automation',
     kind: 'write',

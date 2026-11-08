@@ -1,77 +1,66 @@
+import type { ActionContext, ActionDef } from '../../actions/define';
+import type { PlaceRefs } from '../../actions/places';
 import { prisma } from '../../config/database';
 import { canAccessSpace } from '../wiki/space-permissions.service';
+import { canViewPage } from '../wiki/wiki-permissions.service';
 
 /**
- * Where a request acts (decision 11): the teams of the projects, issues and sprints it names, and
- * the spaces of the spaces and pages it names. Both empty for an org-level request.
+ * Where a request acts (decision 11), as a bot's request stores it: the teams, spaces and pages the
+ * action's place resolver found, and whether the action is org level. Nothing found on an action
+ * that is not org level is a place nobody can open.
  */
 export interface RequestPlace {
   teamIds: string[];
   spaceIds: string[];
+  pageIds: string[];
+  orgLevel: boolean;
 }
 
 /**
- * Every id of one field the input holds, as strings.
- * @param input - The validated input
- * @param field - The field name
+ * Ids once each, in a stable order.
+ * @param ids - Ids
  */
-function idsOf(input: Record<string, unknown>, field: string): string[] {
-  const value = input[field];
-  if (typeof value === 'string' && value) return [value];
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item !== '')
-    : [];
+function unique(ids: string[] | undefined): string[] {
+  return [...new Set(ids ?? [])].sort();
 }
 
 /**
- * The place an action's input touches, read from the ids authorize reads: a team, or the team of
- * a project, issue or sprint, and a space, or the space of a page. Ids that name nothing add
- * nothing, as the action could not run on them either.
- * @param input - The action's validated input
+ * The place of one call, from what the action declares: its resolver, or orgLevel. An action that
+ * declares neither (the registry rules refuse that) acts nowhere anyone can open.
+ * @param def - The action
+ * @param ctx - Who runs it
+ * @param input - Its validated input
  */
-export async function placeOfInput(input: unknown): Promise<RequestPlace> {
-  if (!input || typeof input !== 'object') return { teamIds: [], spaceIds: [] };
-  const given = input as Record<string, unknown>;
-  const issueIds = [...idsOf(given, 'issueId'), ...idsOf(given, 'issueIds')];
-  const projectIds = idsOf(given, 'projectId');
-  const sprintIds = idsOf(given, 'sprintId');
-  const pageIds = idsOf(given, 'pageId');
-  const [projects, issues, sprints, pages] = await Promise.all([
-    projectIds.length
-      ? prisma.project.findMany({ where: { id: { in: projectIds } }, select: { teamId: true } })
-      : [],
-    issueIds.length
-      ? prisma.issue.findMany({
-          where: { id: { in: issueIds } },
-          select: { project: { select: { teamId: true } } },
-        })
-      : [],
-    sprintIds.length
-      ? prisma.sprint.findMany({
-          where: { id: { in: sprintIds } },
-          select: { project: { select: { teamId: true } } },
-        })
-      : [],
-    pageIds.length
-      ? prisma.page.findMany({ where: { id: { in: pageIds } }, select: { spaceId: true } })
-      : [],
-  ]);
-  const teamIds = new Set(idsOf(given, 'teamId'));
-  for (const row of projects) teamIds.add(row.teamId);
-  for (const row of [...issues, ...sprints]) teamIds.add(row.project.teamId);
-  const spaceIds = new Set(idsOf(given, 'spaceId'));
-  for (const row of pages) spaceIds.add(row.spaceId);
-  return { teamIds: [...teamIds].sort(), spaceIds: [...spaceIds].sort() };
+export async function placeFor(
+  def: ActionDef,
+  ctx: ActionContext,
+  input: unknown,
+): Promise<RequestPlace> {
+  const found: PlaceRefs = def.place
+    ? await def.place(ctx, input)
+    : { orgLevel: def.orgLevel === true };
+  return {
+    teamIds: unique(found.teamIds),
+    spaceIds: unique(found.spaceIds),
+    pageIds: unique(found.pageIds),
+    orgLevel: found.orgLevel === true,
+  };
 }
 
 /**
- * Whether a user can open every part of a place: a team as its projects are opened (a membership,
- * or a platform admin), a space by its view right. An org-level place is open to anyone asked.
+ * Whether a user can open every part of a place:
+ * - a team as its projects are opened (a membership, or a platform admin);
+ * - a space by its view right;
+ * - a page by its space's view right and its own restrictions.
+ * A place with no part is open to anyone only when the action is org level, and to nobody
+ * otherwise.
  * @param userId - The user
  * @param place - The place
  */
 export async function canOpenPlace(userId: string, place: RequestPlace): Promise<boolean> {
-  if (place.teamIds.length === 0 && place.spaceIds.length === 0) return true;
+  if (place.teamIds.length === 0 && place.spaceIds.length === 0 && place.pageIds.length === 0) {
+    return place.orgLevel;
+  }
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
   if (user?.isAdmin) return true;
   if (place.teamIds.length > 0) {
@@ -83,5 +72,39 @@ export async function canOpenPlace(userId: string, place: RequestPlace): Promise
   for (const spaceId of place.spaceIds) {
     if (!(await canAccessSpace(spaceId, userId, 'VIEW'))) return false;
   }
+  if (place.pageIds.length > 0) {
+    const pages = await prisma.page.findMany({
+      where: { id: { in: place.pageIds } },
+      select: { id: true, spaceId: true },
+    });
+    // A page that is gone can't be opened
+    if (pages.length !== place.pageIds.length) return false;
+    for (const page of pages) {
+      if (!(await canAccessSpace(page.spaceId, userId, 'VIEW'))) return false;
+      if (!(await canViewPage(userId, page.id))) return false;
+    }
+  }
   return true;
+}
+
+/**
+ * The place a stored request holds.
+ * @param row - The request's place columns
+ * @param row.placeTeamIds
+ * @param row.placeSpaceIds
+ * @param row.placePageIds
+ * @param row.placeOrgLevel
+ */
+export function placeOfRow(row: {
+  placeTeamIds: string[];
+  placeSpaceIds: string[];
+  placePageIds: string[];
+  placeOrgLevel: boolean;
+}): RequestPlace {
+  return {
+    teamIds: row.placeTeamIds,
+    spaceIds: row.placeSpaceIds,
+    pageIds: row.placePageIds,
+    orgLevel: row.placeOrgLevel,
+  };
 }

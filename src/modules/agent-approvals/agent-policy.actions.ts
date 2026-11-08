@@ -88,6 +88,7 @@ registerActions([
   }),
   defineAction({
     name: 'agentPolicy.update',
+    orgLevel: true,
     // A token must not change its own leash, so it waits for you
     admin: true,
     area: 'approvals',

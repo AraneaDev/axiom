@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
 import { orgsOfDashboard } from '../../actions/org-lookups';
+import { dashboardPlace, inputOrOrgPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { dashboardUpdate } from '../../actions/sharing-previews';
@@ -102,6 +103,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboard.create',
+    place: inputOrOrgPlace,
     area: 'dashboards',
     kind: 'write',
     summary:
@@ -132,6 +134,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboard.update',
+    place: dashboardPlace,
     permissionChange: ({ visibility, teamId, orgId }) =>
       visibility !== undefined || teamId !== undefined || orgId !== undefined,
     preview: (ctx, { id, ...rest }) => dashboardUpdate(ctx.userId, id, rest),
@@ -161,6 +164,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboard.delete',
+    place: dashboardPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     destructive: true,
     area: 'dashboards',
@@ -269,6 +273,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.add',
+    place: dashboardPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
@@ -293,6 +298,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.update',
+    place: dashboardPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
@@ -315,6 +321,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.remove',
+    place: dashboardPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     destructive: true,
     area: 'dashboards',
@@ -332,6 +339,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.reorder',
+    place: dashboardPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',

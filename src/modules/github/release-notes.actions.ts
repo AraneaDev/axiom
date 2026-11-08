@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { projectAction, spaceAccess } from '../../actions/authorize';
 import type { ActionContext } from '../../actions/define';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -62,6 +63,7 @@ async function writeNotesAccess(ctx: ActionContext, input: NotesTarget): Promise
 registerActions([
   defineAction({
     name: 'githubRelease.writeNotes',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     // Replacing a body a person wrote on GitHub loses it

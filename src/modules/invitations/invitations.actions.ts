@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { orgPermission } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputOrOrgPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { createInvitationSchema } from '../../utils/validation';
@@ -48,6 +49,7 @@ registerActions([
   }),
   defineAction({
     name: 'invitation.list',
+    place: inputOrOrgPlace,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -63,6 +65,7 @@ registerActions([
   }),
   defineAction({
     name: 'invitation.create',
+    place: inputOrOrgPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -80,6 +83,7 @@ registerActions([
   }),
   defineAction({
     name: 'invitation.revoke',
+    orgLevel: true,
     admin: true,
     destructive: true,
     area: 'admin',

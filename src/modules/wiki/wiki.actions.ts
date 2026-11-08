@@ -19,6 +19,13 @@ import {
   orgsOfSpaces,
 } from '../../actions/org-lookups';
 import { listWindow, pagedList } from '../../actions/paging';
+import {
+  inputPlace,
+  pageCommentPlace,
+  pageRestrictionPlace,
+  pageTemplatePlace,
+  templateContextPlace,
+} from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -150,6 +157,7 @@ async function authorizeResolveTemplate(
 const templateActions = [
   defineAction({
     name: 'pageTemplate.resolve',
+    place: templateContextPlace,
     orgIds: async (_ctx, { context }) => [
       ...(await orgsOfSpaces([context.spaceId])),
       ...(await orgsOfProjects(context.projectId ? [context.projectId] : [])),
@@ -184,6 +192,7 @@ const manageSpace = spaceAccess<z.infer<typeof spaceTarget>>('ADMIN', (i) => i.s
 const accessActions = [
   defineAction({
     name: 'space.create',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -199,6 +208,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'space.update',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -219,6 +229,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'spacePermission.list',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -233,6 +244,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'spacePermission.set',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -251,6 +263,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'spacePermission.remove',
+    place: inputPlace,
     admin: true,
     destructive: true,
     area: 'admin',
@@ -267,6 +280,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'pageRestriction.get',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -280,6 +294,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'pageRestriction.set',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -298,6 +313,7 @@ const accessActions = [
   }),
   defineAction({
     name: 'pageRestriction.remove',
+    place: pageRestrictionPlace,
     admin: true,
     destructive: true,
     area: 'admin',
@@ -376,6 +392,7 @@ const spaceActions = [
 const pageActions = [
   defineAction({
     name: 'page.create',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Create a page in a space, with a body or from a template (templateId)',
@@ -407,6 +424,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.update',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Update a page; fields left out keep their value',
@@ -420,6 +438,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.delete',
+    place: inputPlace,
     destructive: true,
     area: 'wiki',
     kind: 'write',
@@ -476,6 +495,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.restore',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Restore an earlier version of a page',
@@ -505,6 +525,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.applyMerge',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Apply the merge of a pending change into the page',
@@ -519,6 +540,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.flush',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Save a page from its live editing session now, with an optional change description',
@@ -537,6 +559,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.move',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Move a page to another parent or space',
@@ -558,6 +581,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.copy',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Copy a page, to the same space or another',
@@ -573,6 +597,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.reorder',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Put a page at a position under a parent',
@@ -602,6 +627,7 @@ const linkActions = [
   }),
   defineAction({
     name: 'pageIssueLink.add',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Link an issue to a page, as an embed or a mention',
@@ -623,6 +649,7 @@ const linkActions = [
   }),
   defineAction({
     name: 'pageIssueLink.remove',
+    place: inputPlace,
     destructive: true,
     area: 'wiki',
     kind: 'write',
@@ -677,6 +704,7 @@ const exportActions = [
 const pageTemplateActions = [
   defineAction({
     name: 'pageTemplate.create',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Save a page template in a space',
@@ -712,6 +740,7 @@ const pageTemplateActions = [
   }),
   defineAction({
     name: 'pageTemplate.delete',
+    place: pageTemplatePlace,
     destructive: true,
     area: 'wiki',
     kind: 'write',
@@ -729,6 +758,7 @@ const pageTemplateActions = [
 const commentActions = [
   defineAction({
     name: 'pageComment.add',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Comment on a wiki page',
@@ -753,6 +783,7 @@ const commentActions = [
   }),
   defineAction({
     name: 'pageComment.update',
+    place: pageCommentPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Edit a page comment, or without a body toggle whether it is resolved',
@@ -770,6 +801,7 @@ const commentActions = [
   }),
   defineAction({
     name: 'pageComment.delete',
+    place: pageCommentPlace,
     destructive: true,
     area: 'wiki',
     kind: 'write',
@@ -784,6 +816,7 @@ const commentActions = [
   }),
   defineAction({
     name: 'pageComment.react',
+    place: pageCommentPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Add your reaction to a page comment, or take it off again',
@@ -816,6 +849,7 @@ const labelActions = [
   }),
   defineAction({
     name: 'pageLabel.add',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Label a wiki page',
@@ -828,6 +862,7 @@ const labelActions = [
   }),
   defineAction({
     name: 'pageLabel.remove',
+    place: inputPlace,
     destructive: true,
     area: 'wiki',
     kind: 'write',
@@ -877,6 +912,7 @@ const engagementActions = [
   }),
   defineAction({
     name: 'pageStar.toggle',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Star a wiki page, or take your star off again',
@@ -901,6 +937,7 @@ const engagementActions = [
   }),
   defineAction({
     name: 'pageView.record',
+    place: inputPlace,
     area: 'wiki',
     kind: 'write',
     summary: 'Count your view of a wiki page',

@@ -148,6 +148,7 @@ registerActions([
   }),
   defineAction({
     name: 'token.create',
+    orgLevel: true,
     admin: true,
     noOrg: true,
     area: 'admin',
@@ -171,6 +172,7 @@ registerActions([
   }),
   defineAction({
     name: 'token.revoke',
+    orgLevel: true,
     admin: true,
     destructive: true,
     noOrg: true,

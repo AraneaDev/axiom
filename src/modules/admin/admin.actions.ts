@@ -52,6 +52,7 @@ async function notYourOwnAccount(ctx: ActionContext, { userId }: { userId: strin
 registerActions([
   defineAction({
     name: 'admin.stats',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -65,6 +66,7 @@ registerActions([
   }),
   defineAction({
     name: 'admin.settings',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -78,6 +80,7 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.list',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -95,6 +98,7 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.get',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -108,6 +112,7 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.update',
+    orgLevel: true,
     admin: true,
     noOrg: true,
     area: 'admin',
@@ -123,6 +128,7 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.delete',
+    orgLevel: true,
     admin: true,
     destructive: true,
     noOrg: true,
@@ -138,6 +144,7 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.deactivate',
+    orgLevel: true,
     admin: true,
     noOrg: true,
     area: 'admin',
@@ -152,6 +159,7 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.reactivate',
+    orgLevel: true,
     admin: true,
     noOrg: true,
     area: 'admin',
@@ -200,6 +208,7 @@ registerActions([
   }),
   defineAction({
     name: 'auditLog.list',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'read',
@@ -235,6 +244,7 @@ registerActions([
   }),
   defineAction({
     name: 'auditLog.get',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'read',

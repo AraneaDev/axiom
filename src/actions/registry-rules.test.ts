@@ -210,6 +210,17 @@ function ruleViolations(def: ActionDef): string[] {
     );
   }
 
+  // Decision 11: a bot's request is offered to the owners who can open where it acts, so every
+  // call that can wait for approval says where that is, and an unknown place is nobody's
+  if ((def.kind === 'write' || def.admin) && !def.uiOnly && !def.tokenBlocked) {
+    if (!def.place && !def.orgLevel) {
+      violations.push(`${def.name}: a write a token can reach declares place or orgLevel (D11)`);
+    }
+    if (def.place && def.orgLevel) {
+      violations.push(`${def.name}: place and orgLevel contradict each other (D11)`);
+    }
+  }
+
   if (def.rest && !def.target) {
     const params = paramsOf(def.rest.path);
     const beyondParams =
@@ -303,6 +314,8 @@ const throwaway = {
   output,
   authorize: noAuthorize,
   handler: noHandler,
+  // Each throwaway tests one rule; the place rule has its own tests
+  orgLevel: true,
 };
 
 describe('registry rules', () => {
@@ -408,6 +421,30 @@ describe('registry rules', () => {
         input: z.object({ filter: schema }),
       });
       expect(ruleViolations(action)).toEqual([expect.stringContaining('R16')]);
+    });
+
+    it('fails on a write that declares neither place nor orgLevel, and on one with both', () => {
+      const write = {
+        ...throwaway,
+        orgLevel: undefined,
+        name: 'throwaway.placeless',
+        area: 'issues' as const,
+        kind: 'write' as const,
+        input: z.object({}),
+      };
+      expect(ruleViolations(defineAction(write))).toEqual([expect.stringContaining('D11')]);
+      expect(
+        ruleViolations(
+          defineAction({ ...write, kind: 'read', admin: true, preview: async () => '' }),
+        ),
+      ).toEqual([expect.stringContaining('D11')]);
+      expect(
+        ruleViolations(
+          defineAction({ ...write, orgLevel: true, place: async () => ({ orgLevel: true }) }),
+        ),
+      ).toEqual([expect.stringContaining('contradict')]);
+      expect(ruleViolations(defineAction({ ...write, uiOnly: true }))).toEqual([]);
+      expect(ruleViolations(defineAction({ ...write, kind: 'read' }))).toEqual([]);
     });
 
     it('fails on an input that is z.unknown() as a whole', () => {

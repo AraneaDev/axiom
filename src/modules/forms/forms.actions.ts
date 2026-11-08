@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import type { ActionContext } from '../../actions/define';
 import { defineAction } from '../../actions/define';
+import { projectPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -101,6 +102,7 @@ registerActions([
   }),
   defineAction({
     name: 'form.create',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary:
@@ -128,6 +130,7 @@ registerActions([
   }),
   defineAction({
     name: 'form.update',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Change a form. regenerateSecret returns a new access code of a gated form, once',
@@ -141,6 +144,7 @@ registerActions([
   }),
   defineAction({
     name: 'form.delete',
+    place: projectPlace,
     destructive: true,
     area: 'forms',
     kind: 'write',
@@ -155,6 +159,7 @@ registerActions([
   }),
   defineAction({
     name: 'form.publish',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Publish a form so that its public link accepts submissions',
@@ -168,6 +173,7 @@ registerActions([
   }),
   defineAction({
     name: 'formPage.create',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Add a page to a form',
@@ -181,6 +187,7 @@ registerActions([
   }),
   defineAction({
     name: 'formPage.reorder',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Set the order of the pages of a form',
@@ -193,6 +200,7 @@ registerActions([
   }),
   defineAction({
     name: 'formPage.update',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Change a page of a form',
@@ -206,6 +214,7 @@ registerActions([
   }),
   defineAction({
     name: 'formPage.delete',
+    place: projectPlace,
     destructive: true,
     area: 'forms',
     kind: 'write',
@@ -220,6 +229,7 @@ registerActions([
   }),
   defineAction({
     name: 'formField.reorder',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Set the order of the fields of a form',
@@ -232,6 +242,7 @@ registerActions([
   }),
   defineAction({
     name: 'formField.create',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Add a field to a page of a form',
@@ -245,6 +256,7 @@ registerActions([
   }),
   defineAction({
     name: 'formField.update',
+    place: projectPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Change a field of a form',
@@ -260,6 +272,7 @@ registerActions([
   }),
   defineAction({
     name: 'formField.delete',
+    place: projectPlace,
     destructive: true,
     area: 'forms',
     kind: 'write',

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -51,6 +52,7 @@ registerActions([
   }),
   defineAction({
     name: 'githubRepo.link',
+    place: inputPlace,
     // Linking shows a repository's pull requests, reviews and CI logs to the whole project
     permissionChange: () => true,
     area: 'github',
@@ -83,6 +85,7 @@ registerActions([
   }),
   defineAction({
     name: 'githubRepo.reconcile',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary: 'Read the linked GitHub repository now and store what the webhooks missed',
@@ -154,6 +157,7 @@ registerActions([
   }),
   defineAction({
     name: 'githubImport.configure',
+    place: inputPlace,
     // Switching on imports every open issue and writes one comment on each of them on GitHub
     destructiveWhen: (input) => input.enabled,
     area: 'github',
@@ -191,6 +195,7 @@ registerActions([
   }),
   defineAction({
     name: 'githubRepo.update',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary:
@@ -214,6 +219,7 @@ registerActions([
   }),
   defineAction({
     name: 'githubRepo.unlink',
+    place: inputPlace,
     destructive: true,
     area: 'github',
     kind: 'write',

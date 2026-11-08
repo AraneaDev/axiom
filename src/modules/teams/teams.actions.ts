@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { orgMember, orgPermission, teamPermission, teamRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import {
@@ -96,6 +97,7 @@ registerActions([
   }),
   defineAction({
     name: 'team.create',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -111,6 +113,7 @@ registerActions([
   }),
   defineAction({
     name: 'team.update',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -128,6 +131,7 @@ registerActions([
   }),
   defineAction({
     name: 'team.delete',
+    place: inputPlace,
     admin: true,
     destructive: true,
     area: 'admin',
@@ -144,6 +148,7 @@ registerActions([
   }),
   defineAction({
     name: 'teamMember.add',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -160,6 +165,7 @@ registerActions([
   }),
   defineAction({
     name: 'teamMember.update',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -176,6 +182,7 @@ registerActions([
   }),
   defineAction({
     name: 'teamMember.remove',
+    place: inputPlace,
     admin: true,
     destructive: true,
     area: 'admin',

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
@@ -48,6 +49,7 @@ registerActions([
   }),
   defineAction({
     name: 'workflowRule.create',
+    place: inputPlace,
     // A rule decides which moves a column allows, which is a human check (ruling B3)
     destructive: true,
     area: 'issues',
@@ -65,6 +67,7 @@ registerActions([
   }),
   defineAction({
     name: 'workflowRule.update',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -81,6 +84,7 @@ registerActions([
   }),
   defineAction({
     name: 'workflowRule.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',

@@ -16,6 +16,7 @@ import {
   orgsOfSpaces,
   orgsOfUser,
 } from '../../actions/org-lookups';
+import { attachmentPlace, uploadFieldsPlace, uploadTargetPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -222,6 +223,7 @@ const multipartFields = z.object({
 const attachmentActions = [
   defineAction({
     name: 'attachment.upload',
+    place: uploadFieldsPlace,
     // The parent is in the multipart body, read after the gate: the handler checks the org rules
     // that name this action once it knows the parent (assertRawNotNamed)
     area: 'files',
@@ -273,6 +275,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.createUploadUrl',
+    place: uploadTargetPlace,
     orgIds: uploadTargetOrgs,
     area: 'files',
     kind: 'write',
@@ -302,6 +305,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.fromUrl',
+    place: uploadTargetPlace,
     orgIds: uploadTargetOrgs,
     area: 'files',
     kind: 'write',
@@ -412,6 +416,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.delete',
+    place: attachmentPlace,
     orgIds: (_ctx, { id }) => orgsOfAttachment(id),
     destructive: true,
     area: 'files',

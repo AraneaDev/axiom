@@ -56,6 +56,7 @@ registerActions([
   }),
   defineAction({
     name: 'org.create',
+    orgLevel: true,
     admin: true,
     // A new org has no rules yet: only the user's own bind this
     noOrg: true,
@@ -72,6 +73,7 @@ registerActions([
   }),
   defineAction({
     name: 'org.update',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -86,6 +88,7 @@ registerActions([
   }),
   defineAction({
     name: 'org.delete',
+    orgLevel: true,
     admin: true,
     destructive: true,
     area: 'admin',
@@ -158,6 +161,7 @@ registerActions([
   }),
   defineAction({
     name: 'orgMember.add',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -174,6 +178,7 @@ registerActions([
   }),
   defineAction({
     name: 'orgMember.update',
+    orgLevel: true,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -190,6 +195,7 @@ registerActions([
   }),
   defineAction({
     name: 'orgMember.remove',
+    orgLevel: true,
     admin: true,
     destructive: true,
     area: 'admin',

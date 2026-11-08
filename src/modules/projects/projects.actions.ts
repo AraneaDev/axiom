@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead, teamMemberWith, teamRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { createProjectSchema, updateProjectSchema } from '../../utils/validation';
@@ -42,6 +43,7 @@ registerActions([
   }),
   defineAction({
     name: 'project.create',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -59,6 +61,7 @@ registerActions([
   }),
   defineAction({
     name: 'project.update',
+    place: inputPlace,
     admin: true,
     area: 'admin',
     kind: 'write',
@@ -76,6 +79,7 @@ registerActions([
   }),
   defineAction({
     name: 'project.delete',
+    place: inputPlace,
     admin: true,
     destructive: true,
     area: 'admin',

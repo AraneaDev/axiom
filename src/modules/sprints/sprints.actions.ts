@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { listWindow, pagedList } from '../../actions/paging';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { READS_BUSY, readSlots } from '../../actions/read.service';
 import { registerActions } from '../../actions/registry';
@@ -64,6 +65,7 @@ async function writeSprintAndIssue(ctx: ActionContext, input: SprintIssueInput):
 const sprintActions = [
   defineAction({
     name: 'sprint.create',
+    place: inputPlace,
     area: 'sprints',
     kind: 'write',
     summary: 'Create a sprint in a project',
@@ -116,6 +118,7 @@ const sprintActions = [
   }),
   defineAction({
     name: 'sprint.update',
+    place: inputPlace,
     area: 'sprints',
     kind: 'write',
     summary: 'Change the name, goal or dates of a sprint',
@@ -129,6 +132,7 @@ const sprintActions = [
   }),
   defineAction({
     name: 'sprint.start',
+    place: inputPlace,
     area: 'sprints',
     kind: 'write',
     summary: 'Start a planned sprint',
@@ -141,6 +145,7 @@ const sprintActions = [
   }),
   defineAction({
     name: 'sprint.complete',
+    place: inputPlace,
     area: 'sprints',
     kind: 'write',
     summary: 'Complete a sprint, moving open issues to another sprint or the backlog',
@@ -205,6 +210,7 @@ const sprintActions = [
   }),
   defineAction({
     name: 'sprint.addIssues',
+    place: inputPlace,
     area: 'sprints',
     kind: 'write',
     summary: 'Add issues to a sprint',
@@ -221,6 +227,7 @@ const sprintActions = [
   }),
   defineAction({
     name: 'sprint.removeIssues',
+    place: inputPlace,
     area: 'sprints',
     kind: 'write',
     summary: 'Take an issue out of a sprint',

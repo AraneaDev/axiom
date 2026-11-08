@@ -118,6 +118,7 @@ registerActions([
   // a person's approval, the bot's own token included
   defineAction({
     name: 'serviceAccount.suspend',
+    orgLevel: true,
     admin: true,
     area: 'orgs',
     kind: 'write',
@@ -134,6 +135,7 @@ registerActions([
   }),
   defineAction({
     name: 'serviceAccount.resume',
+    orgLevel: true,
     admin: true,
     area: 'orgs',
     kind: 'write',

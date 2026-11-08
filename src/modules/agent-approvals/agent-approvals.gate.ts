@@ -14,7 +14,7 @@ import { eligibleOwnerIds } from '../service-accounts/owners';
 import { isServiceAccount } from '../service-accounts/person';
 
 import { policyForCall, rawNamedRefusal, type FullPolicy } from './agent-policy.service';
-import { canOpenPlace, placeOfInput, type RequestPlace } from './request-place';
+import { canOpenPlace, placeFor, type RequestPlace } from './request-place';
 
 /*
  * The approval gate of executeAction, apart from the service that lists, approves and runs the
@@ -269,7 +269,9 @@ async function requestApproval(
   const bot = await isServiceAccount(ctx.userId);
   const minutes = bot ? policy.botExpiresMinutes : policy.expiresMinutes;
   // Only a bot's request is shown by place: a person's is theirs wherever it acts
-  const place = bot ? await placeOfInput(input) : { teamIds: [], spaceIds: [] };
+  const place: RequestPlace = bot
+    ? await placeFor(def, ctx, input)
+    : { teamIds: [], spaceIds: [], pageIds: [], orgLevel: false };
   const row = await createWithinCap({
     userId: ctx.userId,
     apiTokenId: ctx.apiTokenId,
@@ -281,6 +283,8 @@ async function requestApproval(
     expiresAt: new Date(Date.now() + minutes * 60_000),
     placeTeamIds: place.teamIds,
     placeSpaceIds: place.spaceIds,
+    placePageIds: place.pageIds,
+    placeOrgLevel: place.orgLevel,
   });
   const approveUrl = `/approvals/agent/${row.id}`;
   // The request stands whether or not telling about it works: it is in the deciders' lists

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isToken } from '../../actions/approval-policy';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -74,6 +75,7 @@ function responseOf(ctx: ActionContext) {
 const issueActions = [
   defineAction({
     name: 'issue.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Create an issue in a project',
@@ -149,6 +151,7 @@ const issueActions = [
   }),
   defineAction({
     name: 'issue.bulkUpdate',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change several issues at once',
@@ -226,6 +229,7 @@ const issueActions = [
   }),
   defineAction({
     name: 'issue.update',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change fields of an issue. Move it with status (a column name) or columnId.',
@@ -249,6 +253,7 @@ const issueActions = [
   }),
   defineAction({
     name: 'issue.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -265,6 +270,7 @@ const issueActions = [
   }),
   defineAction({
     name: 'issue.move',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Move an issue to a board column and position',
@@ -282,6 +288,7 @@ const issueActions = [
   }),
   defineAction({
     name: 'issue.setParent',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Set or clear the parent of an issue',
@@ -340,6 +347,7 @@ const issueActions = [
 const commentActions = [
   defineAction({
     name: 'comment.add',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Comment on an issue',
@@ -355,6 +363,7 @@ const commentActions = [
   }),
   defineAction({
     name: 'comment.update',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Edit your own comment',
@@ -371,6 +380,7 @@ const commentActions = [
   }),
   defineAction({
     name: 'comment.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -390,6 +400,7 @@ const commentActions = [
 const worklogActions = [
   defineAction({
     name: 'worklog.add',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Log time on an issue',
@@ -432,6 +443,7 @@ const linkActions = [
   }),
   defineAction({
     name: 'issueLink.add',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Link an issue to another issue',
@@ -456,6 +468,7 @@ const linkActions = [
   }),
   defineAction({
     name: 'issueLink.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -483,6 +496,7 @@ const linkActions = [
 const personalActions = [
   defineAction({
     name: 'issueVote.toggle',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Vote for an issue, or take your vote back',
@@ -509,6 +523,7 @@ const personalActions = [
   }),
   defineAction({
     name: 'issueWatch.toggle',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Watch an issue, or stop watching it',
@@ -554,6 +569,7 @@ const webLinkActions = [
   }),
   defineAction({
     name: 'issueWebLink.add',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Add an external http(s) link to an issue',
@@ -567,6 +583,7 @@ const webLinkActions = [
   }),
   defineAction({
     name: 'issueWebLink.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',

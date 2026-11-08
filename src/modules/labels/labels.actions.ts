@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import {
@@ -34,6 +35,7 @@ const write = projectAction<ProjectInput>('issue:edit', (input) => input.project
 registerActions([
   defineAction({
     name: 'label.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Create a label in a project',
@@ -62,6 +64,7 @@ registerActions([
   }),
   defineAction({
     name: 'label.update',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change the name, color or description of a label',
@@ -75,6 +78,7 @@ registerActions([
   }),
   defineAction({
     name: 'label.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',

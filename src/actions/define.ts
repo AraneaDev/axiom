@@ -3,6 +3,8 @@ import type { z } from 'zod';
 
 import type { ScopeArea } from '../middleware/token-scopes';
 
+import type { PlaceRefs } from './places';
+
 /** Who runs an action and through what. `scopes` is set for tokens and absent for sessions. */
 export interface ActionContext {
   userId: string;
@@ -107,6 +109,15 @@ export interface ActionDef<
    */
   orgIds?(ctx: ActionContext, input: z.infer<I>): Promise<string[]>;
   /**
+   * Where this call acts (decision 11): the teams, spaces and pages it touches, read from the
+   * database (src/actions/places.ts). A bot's request is shown and offered only to its owners who
+   * can open all of it, and one whose place comes back empty is nobody's to decide. Every write a
+   * token can reach declares this or `orgLevel` (registry rules).
+   */
+  place?(ctx: ActionContext, input: z.infer<I>): Promise<PlaceRefs>;
+  /** The call acts on no team, space or page, so any owner of a bot decides its request. */
+  orgLevel?: boolean;
+  /**
    * Whether this call changes who may reach something (sharing). Such a call always waits for
    * approval when a token makes it, whatever an org's rules say, as it can take a record out of
    * the sight of the rules that bind it.
@@ -184,7 +195,14 @@ export function defineAction(def: ActionDef): ActionDef {
 }
 
 /** The parts of an action that run with a context, for a public one. */
-type ContextFree = 'authorize' | 'handler' | 'rest' | 'orgIds' | 'preview' | 'crossContainer';
+type ContextFree =
+  | 'authorize'
+  | 'handler'
+  | 'rest'
+  | 'orgIds'
+  | 'place'
+  | 'preview'
+  | 'crossContainer';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type PublicDef<I extends z.ZodType, O extends z.ZodType, T extends z.ZodType | undefined> = Omit<

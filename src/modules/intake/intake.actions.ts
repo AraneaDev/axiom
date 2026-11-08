@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import { registerActions } from '../../actions/registry';
 
 import * as intakeService from './intake.service';
@@ -59,6 +60,7 @@ registerActions([
   }),
   defineAction({
     name: 'intake.approve',
+    place: inputPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Approve a submission, which creates an issue from it',
@@ -72,6 +74,7 @@ registerActions([
   }),
   defineAction({
     name: 'intake.reject',
+    place: inputPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Reject a pending submission, with a note',
@@ -85,6 +88,7 @@ registerActions([
   }),
   defineAction({
     name: 'intake.markSpam',
+    place: inputPlace,
     area: 'forms',
     kind: 'write',
     summary: 'Mark a submission as spam',

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { projectAction, projectRead, recordInProject } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import { orgsOfMilestone } from '../../actions/org-lookups';
+import { inputPlace, milestonePlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { ERR } from '../../utils/error-messages';
@@ -57,6 +58,7 @@ registerActions([
   }),
   defineAction({
     name: 'milestone.update',
+    place: milestonePlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change the title, description, due date or status of a milestone',
@@ -71,6 +73,7 @@ registerActions([
   }),
   defineAction({
     name: 'milestone.delete',
+    place: milestonePlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -86,6 +89,7 @@ registerActions([
   }),
   defineAction({
     name: 'milestone.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Create a milestone in a project',

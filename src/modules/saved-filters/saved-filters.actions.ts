@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
 import { orgsOfSavedQuery } from '../../actions/org-lookups';
+import { inputOrOrgPlace, savedQueryPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { savedQueryUpdate } from '../../actions/sharing-previews';
@@ -90,6 +91,7 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.create',
+    place: inputOrOrgPlace,
     area: 'dashboards',
     kind: 'write',
     summary:
@@ -123,6 +125,7 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.update',
+    place: savedQueryPlace,
     permissionChange: ({ visibility, teamId, orgId }) =>
       visibility !== undefined || teamId !== undefined || orgId !== undefined,
     preview: (ctx, { filterId, ...rest }) => savedQueryUpdate(ctx.userId, filterId, rest),
@@ -152,6 +155,7 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.delete',
+    place: savedQueryPlace,
     orgIds: (_ctx, { filterId }) => orgsOfSavedQuery(filterId),
     destructive: true,
     area: 'dashboards',

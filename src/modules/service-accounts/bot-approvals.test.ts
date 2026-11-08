@@ -7,6 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -29,7 +30,7 @@ const MINUTE = 60 * 1000;
 const BOT_SCOPES = MINTABLE_SCOPES.filter((s) => !s.startsWith('admin:'));
 
 const runs: string[] = [];
-/** Who each run of botApprovalTest.place ran as */
+/** Who each run of botApprovalTest.place and botApprovalTest.org ran as */
 const ranAs: string[] = [];
 
 /** What a stub says instead of the preview */
@@ -47,6 +48,24 @@ registerActions([
       spaceId: z.string().optional(),
       value: z.string(),
     }),
+    output: z.looseObject({ id: z.string() }),
+    place: inputPlace,
+    preview: (_ctx, { value }) => Promise.resolve(`Touch ${value}`),
+    authorize: () => Promise.resolve(),
+    handler: (ctx, { value }) => {
+      runs.push(value);
+      ranAs.push(ctx.userId);
+      return Promise.resolve({ id: value });
+    },
+  }),
+  defineAction({
+    name: 'botApprovalTest.org',
+    destructive: true,
+    orgLevel: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'A test action that acts on the org, in no team or space',
+    input: z.object({ value: z.string() }),
     output: z.looseObject({ id: z.string() }),
     preview: (_ctx, { value }) => Promise.resolve(`Touch ${value}`),
     authorize: () => Promise.resolve(),
@@ -228,13 +247,15 @@ describe('service accounts: approvals for bots', () => {
   }
 
   /**
-   * The second bot asks for botApprovalTest.place through /api/act, which waits.
-   * @param input - Its input: a project, a space, or neither
+   * The second bot asks through /api/act, which waits: botApprovalTest.place for an input that
+   * names a project or a space, botApprovalTest.org (org level) for one that names neither.
+   * @param input - Its input
    * @param raw - The bot token
    */
   async function botTouches(input: Record<string, string>, raw = bot2Token) {
+    const placed = 'projectId' in input || 'spaceId' in input;
     const res = await withToken('post', '/api/act', raw).send({
-      action: 'botApprovalTest.place',
+      action: placed ? 'botApprovalTest.place' : 'botApprovalTest.org',
       input,
     });
     expect(res.status).toBe(202);
@@ -582,6 +603,20 @@ describe('service accounts: approvals for bots', () => {
     expect((await approve(inSpace, owner)).status).toBe(404);
     expect(await notified(owner.id, inSpace)).toBe(false);
 
+    // A place that comes back empty on an action that is not org level is nobody's to decide
+    const unknown = await withToken('post', '/api/act', bot2Token).send({
+      action: 'botApprovalTest.place',
+      input: { value: 'nowhere' },
+    });
+    expect(unknown.status).toBe(202);
+    const nowhere = unknown.body.approvalId as string;
+    for (const who of [owner, owner2]) {
+      const seen = await authGet(`/api/agent-approvals/${nowhere}`, who.token);
+      expect(seen.body).toMatchObject({ preview: STUB, restricted: true });
+      expect((await approve(nowhere, who)).status).toBe(404);
+      expect(await notified(who.id, nowhere)).toBe(false);
+    }
+
     const orgLevel = await botTouches({ value: 'org-level' });
     expect(await notified(owner.id, orgLevel)).toBe(true);
     expect(await notified(owner2.id, orgLevel)).toBe(true);
@@ -674,7 +709,7 @@ describe('service accounts: approvals for bots', () => {
     let viaMcp: string;
     try {
       const answer = await callTool(client, 'act', {
-        action: 'botApprovalTest.place',
+        action: 'botApprovalTest.org',
         input: { value: 'over-mcp' },
       });
       expect(answer.data.status).toBe('pending_approval');
@@ -693,7 +728,7 @@ describe('service accounts: approvals for bots', () => {
       await prisma.auditLog.findMany({
         where: {
           userId: bot2Id,
-          action: 'botApprovalTest.place',
+          action: 'botApprovalTest.org',
           details: { path: ['outcome'], equals: 'ok' },
         },
       })
@@ -753,6 +788,130 @@ describe('service accounts: approvals for bots', () => {
     } finally {
       await prisma.organization.deleteMany({ where: { id: org.id } });
       await prisma.user.deleteMany({ where: { id: orgBot } });
+    }
+  });
+
+  // ─── Fix round 2: every action names its place ────────────────────────────────
+
+  /**
+   * A page in a space, made directly.
+   * @param spaceId - The space
+   * @param slug - Its slug
+   */
+  async function makePage(spaceId: string, slug: string) {
+    return prisma.page.create({
+      data: { spaceId, slug, title: `Voorbeeld ${slug}`, body: 'Body' },
+    });
+  }
+
+  it('pageComment.delete by a bot is decided only by an owner who can open the page', async () => {
+    await prisma.teamMembership.create({ data: { teamId: teamB, userId: bot2Id, role: 'MEMBER' } });
+    try {
+      const page = await makePage(spaceB, 'comment-page-botappr');
+      const comment = await prisma.pageComment.create({
+        data: { pageId: page.id, userId: bot2Id, body: 'A comment by the bot' },
+      });
+      const res = await withToken('delete', `/api/wiki/comments/${comment.id}`, bot2Token);
+      expect(res.status).toBe(202);
+      const id = res.body.approvalId as string;
+      const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
+      expect(row.placePageIds).toEqual([page.id]);
+
+      const outside = await authGet(`/api/agent-approvals/${id}`, owner.token);
+      expect(outside.body).toMatchObject({ preview: STUB, restricted: true });
+      expect((await approve(id, owner)).status).toBe(404);
+      expect(await notified(owner.id, id)).toBe(false);
+
+      expect(await notified(owner2.id, id)).toBe(true);
+      const done = await approve(id, owner2);
+      expect(done.body.status).toBe('EXECUTED');
+      expect(await prisma.pageComment.findUnique({ where: { id: comment.id } })).toBeNull();
+    } finally {
+      await prisma.teamMembership.deleteMany({ where: { teamId: teamB, userId: bot2Id } });
+    }
+  });
+
+  it('a restricted page is a stub to an owner who has the space but not the page', async () => {
+    await prisma.teamMembership.create({ data: { teamId: teamB, userId: bot2Id, role: 'MEMBER' } });
+    try {
+      const page = await makePage(spaceB, 'restricted-page-botappr');
+      await prisma.pageRestriction.createMany({
+        data: [
+          { pageId: page.id, type: 'VIEW', userId: bot2Id },
+          { pageId: page.id, type: 'VIEW', userId: ctx.owner.id },
+        ],
+      });
+      const res = await withToken(
+        'delete',
+        `/api/wiki/spaces/${spaceB}/pages/${page.slug}`,
+        bot2Token,
+      );
+      expect(res.status).toBe(202);
+      const id = res.body.approvalId as string;
+      const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
+      expect(row.placePageIds).toEqual([page.id]);
+
+      // owner2 opens space B, but not this page
+      const seen = await authGet(`/api/agent-approvals/${id}`, owner2.token);
+      expect(seen.body).toMatchObject({ preview: STUB, restricted: true });
+      expect((await approve(id, owner2)).status).toBe(404);
+      expect(await notified(owner2.id, id)).toBe(false);
+
+      await prisma.pageRestriction.create({
+        data: { pageId: page.id, type: 'VIEW', userId: owner2.id },
+      });
+      const now = await authGet(`/api/agent-approvals/${id}`, owner2.token);
+      expect(now.body.restricted).toBeUndefined();
+      expect((await approve(id, owner2)).body.status).toBe('EXECUTED');
+    } finally {
+      await prisma.teamMembership.deleteMany({ where: { teamId: teamB, userId: bot2Id } });
+    }
+  });
+
+  it('page.move to another space needs an owner who can open both', async () => {
+    const spaceA = (
+      await prisma.wikiSpace.create({
+        data: { teamId: ctx.teamId, name: 'Voorbeeld wiki A', slug: 'voorbeeld-wiki-a-botappr' },
+      })
+    ).id;
+    await prisma.teamMembership.createMany({
+      data: [
+        { teamId: teamB, userId: bot2Id, role: 'MEMBER' },
+        { teamId: ctx.teamId, userId: bot2Id, role: 'MEMBER' },
+      ],
+    });
+    try {
+      const page = await makePage(spaceB, 'moving-page-botappr');
+      const res = await withToken('post', `/api/wiki/pages/${page.id}/move`, bot2Token).send({
+        targetSpaceId: spaceA,
+      });
+      expect(res.status).toBe(202);
+      const id = res.body.approvalId as string;
+      const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
+      expect(row.placePageIds).toEqual([page.id]);
+      expect(row.placeSpaceIds).toEqual([spaceA]);
+
+      // owner opens space A only, owner2 space B only: neither decides
+      for (const who of [owner, owner2]) {
+        expect((await approve(id, who)).status).toBe(404);
+      }
+      await prisma.teamMembership.create({
+        data: { teamId: ctx.teamId, userId: owner2.id, role: 'MEMBER' },
+      });
+      try {
+        const done = await approve(id, owner2);
+        expect(done.body.status).toBe('EXECUTED');
+      } finally {
+        await prisma.teamMembership.deleteMany({
+          where: { teamId: ctx.teamId, userId: owner2.id },
+        });
+      }
+    } finally {
+      await prisma.teamMembership.deleteMany({
+        where: { userId: bot2Id, teamId: { in: [teamB, ctx.teamId] } },
+      });
+      await prisma.page.deleteMany({ where: { spaceId: { in: [spaceA, spaceB] } } });
+      await prisma.wikiSpace.delete({ where: { id: spaceA } });
     }
   });
 });

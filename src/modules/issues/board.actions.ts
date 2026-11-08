@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { dbInt, listPosition, MAX_REORDER } from '../../utils/validation';
@@ -58,6 +59,7 @@ registerActions([
   }),
   defineAction({
     name: 'boardColumn.create',
+    place: inputPlace,
     area: 'boards',
     kind: 'write',
     summary: 'Add a column to the board of a project',
@@ -76,6 +78,7 @@ registerActions([
   }),
   defineAction({
     name: 'boardColumn.reorder',
+    place: inputPlace,
     area: 'boards',
     kind: 'write',
     summary: 'Set the positions of the columns of a board',
@@ -91,6 +94,7 @@ registerActions([
   }),
   defineAction({
     name: 'boardColumn.update',
+    place: inputPlace,
     // A rename or a change of isDone changes what a column means to workflows, gates and reports.
     // That is destructive (ruling B3, B13): a token's call waits for approval, and an org's rules
     // may relax it. A limit alone does not wait
@@ -114,6 +118,7 @@ registerActions([
   }),
   defineAction({
     name: 'boardColumn.delete',
+    place: inputPlace,
     destructive: true,
     area: 'boards',
     kind: 'write',

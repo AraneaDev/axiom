@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { projectAction, projectRead, recordInProject } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import { orgsOfApprovalRequest } from '../../actions/org-lookups';
+import { approvalRequestPlace, inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
@@ -72,6 +73,7 @@ registerActions([
   }),
   defineAction({
     name: 'approvalGate.create',
+    place: inputPlace,
     // A gate decides whom an issue needs before it moves, and a new one can be the weaker way
     // into a column that another gate guards (ruling B3)
     destructive: true,
@@ -95,6 +97,7 @@ registerActions([
   }),
   defineAction({
     name: 'approvalGate.update',
+    place: inputPlace,
     destructive: true,
     area: 'approvals',
     kind: 'write',
@@ -112,6 +115,7 @@ registerActions([
   }),
   defineAction({
     name: 'approvalGate.delete',
+    place: inputPlace,
     destructive: true,
     area: 'approvals',
     kind: 'write',
@@ -165,6 +169,7 @@ registerActions([
   }),
   defineAction({
     name: 'approvalRequest.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Ask people to approve moving an issue into a column that a gate guards',
@@ -183,6 +188,7 @@ registerActions([
   }),
   defineAction({
     name: 'approvalRequest.vote',
+    place: approvalRequestPlace,
     // A vote decides the request, and an approval moves the issue past a human check (A21)
     destructive: true,
     orgIds: (_ctx, { requestId }) => orgsOfApprovalRequest(requestId),
@@ -202,6 +208,7 @@ registerActions([
   }),
   defineAction({
     name: 'approvalRequest.cancel',
+    place: approvalRequestPlace,
     orgIds: (_ctx, { requestId }) => orgsOfApprovalRequest(requestId),
     area: 'approvals',
     kind: 'write',

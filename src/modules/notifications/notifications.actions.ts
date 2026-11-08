@@ -73,6 +73,7 @@ registerActions([
   }),
   defineAction({
     name: 'notification.setPreference',
+    orgLevel: true,
     area: 'issues',
     kind: 'write',
     openToReadOf: OWN_STATE,
@@ -105,6 +106,7 @@ registerActions([
   }),
   defineAction({
     name: 'notification.markAllRead',
+    orgLevel: true,
     area: 'issues',
     kind: 'write',
     openToReadOf: OWN_STATE,
@@ -121,6 +123,7 @@ registerActions([
   }),
   defineAction({
     name: 'notification.markRead',
+    orgLevel: true,
     area: 'issues',
     kind: 'write',
     openToReadOf: OWN_STATE,

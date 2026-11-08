@@ -1392,10 +1392,15 @@ model AgentApproval {
   decidedAt     DateTime?
   expiresAt     DateTime
   createdAt     DateTime            @default(now())
-  /// Where a bot's request acts (decision 11): only owners who can open every one of these teams
-  /// and spaces see and decide it. Both empty: org level, any owner decides
+  /// Where a bot's request acts (decision 11): only owners who can open every one of these teams,
+  /// spaces and pages see and decide it
   placeTeamIds  String[]            @default([])
   placeSpaceIds String[]            @default([])
+  /// Pages are checked at page level, with their restrictions (decision 11)
+  placePageIds  String[]            @default([])
+  /// The action declares orgLevel: an empty place is any owner's. Otherwise an empty place, one
+  /// nothing resolved, is nobody's to decide
+  placeOrgLevel Boolean             @default(false)
 
   @@index([userId, status])
   @@index([status, expiresAt])

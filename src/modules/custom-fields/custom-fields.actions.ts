@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { projectAction, projectRead, recordInProject } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import { orgsOfCustomField } from '../../actions/org-lookups';
+import { customFieldPlace, inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
@@ -75,6 +76,7 @@ const writeFieldValue = recordInProject<FieldInput>(
 registerActions([
   defineAction({
     name: 'customField.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Define a custom field of a project: TEXT, NUMBER, DATE, SELECT, MULTI_SELECT or USER',
@@ -100,6 +102,7 @@ registerActions([
   }),
   defineAction({
     name: 'customField.update',
+    place: customFieldPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change the name, options, required flag or position of a custom field',
@@ -119,6 +122,7 @@ registerActions([
   }),
   defineAction({
     name: 'customField.delete',
+    place: customFieldPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -148,6 +152,7 @@ registerActions([
   }),
   defineAction({
     name: 'customFieldValue.set',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Set the value of a custom field on an issue',

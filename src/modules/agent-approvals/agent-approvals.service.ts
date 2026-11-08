@@ -13,7 +13,7 @@ import { isServiceAccount } from '../service-accounts/person';
 
 import { OUTCOME_UNKNOWN } from './agent-approvals.cleanup';
 import { announce, runApproved } from './agent-approvals.gate';
-import { canOpenPlace } from './request-place';
+import { canOpenPlace, placeOfRow } from './request-place';
 
 const MAX_RESULT_BYTES = 1024 * 1024;
 
@@ -28,6 +28,8 @@ const LIST_FIELDS = {
   userId: true,
   placeTeamIds: true,
   placeSpaceIds: true,
+  placePageIds: true,
+  placeOrgLevel: true,
   action: true,
   preview: true,
   status: true,
@@ -82,6 +84,8 @@ type StubSource = Pick<
   | 'createdAt'
   | 'placeTeamIds'
   | 'placeSpaceIds'
+  | 'placePageIds'
+  | 'placeOrgLevel'
 >;
 
 /**
@@ -98,7 +102,7 @@ async function shown<T extends StubSource>(rows: T[], reader: Reader) {
       const bot = reader.bots.get(row.userId);
       if (!bot) return viewed;
       const serviceAccount = { id: bot.id, displayName: bot.displayName };
-      const place = { teamIds: row.placeTeamIds, spaceIds: row.placeSpaceIds };
+      const place = placeOfRow(row);
       const key = JSON.stringify(place);
       if (!opens.has(key)) opens.set(key, canOpenPlace(reader.userId, place));
       if (await opens.get(key)) return { ...viewed, serviceAccount };
@@ -263,7 +267,13 @@ async function decisionScope(
 ): Promise<Prisma.AgentApprovalWhereInput | null> {
   const row = await prisma.agentApproval.findUnique({
     where: { id },
-    select: { userId: true, placeTeamIds: true, placeSpaceIds: true },
+    select: {
+      userId: true,
+      placeTeamIds: true,
+      placeSpaceIds: true,
+      placePageIds: true,
+      placeOrgLevel: true,
+    },
   });
   if (!row) return null;
   if (row.userId === userId) return { userId };
@@ -272,7 +282,7 @@ async function decisionScope(
     select: { orgId: true },
   });
   if (!bot) return null;
-  if (!(await canOpenPlace(userId, { teamIds: row.placeTeamIds, spaceIds: row.placeSpaceIds }))) {
+  if (!(await canOpenPlace(userId, placeOfRow(row)))) {
     return null;
   }
   return {

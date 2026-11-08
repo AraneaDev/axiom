@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { createIssueTemplateSchema, updateIssueTemplateSchema } from '../../utils/validation';
@@ -29,6 +30,7 @@ const write = projectAction<ProjectInput>('team:manage_members', (input) => inpu
 registerActions([
   defineAction({
     name: 'issueTemplate.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Create an issue template in a project',
@@ -67,6 +69,7 @@ registerActions([
   }),
   defineAction({
     name: 'issueTemplate.update',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change an issue template',
@@ -80,6 +83,7 @@ registerActions([
   }),
   defineAction({
     name: 'issueTemplate.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',

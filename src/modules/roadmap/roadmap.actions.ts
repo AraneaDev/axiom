@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { projectAction, projectRead, teamRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 
@@ -57,6 +58,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmapBucket.create',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Add a roadmap bucket to a project',
@@ -69,6 +71,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmapBucket.createDefaults',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Add the default roadmap buckets to a project',
@@ -81,6 +84,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmapBucket.reorder',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Put the roadmap buckets of a project in the order of the ids given',
@@ -94,6 +98,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmapBucket.update',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Change the name, color or position of a roadmap bucket',
@@ -107,6 +112,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmapBucket.delete',
+    place: inputPlace,
     destructive: true,
     area: 'issues',
     kind: 'write',
@@ -161,6 +167,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmap.setIssueBucket',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Move an issue to a roadmap bucket of its project, or out of any with null',
@@ -174,6 +181,7 @@ registerActions([
   }),
   defineAction({
     name: 'roadmap.setIssueDates',
+    place: inputPlace,
     area: 'issues',
     kind: 'write',
     summary: 'Set the start and due date of an issue on the roadmap; null clears one',

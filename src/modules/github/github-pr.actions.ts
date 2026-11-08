@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
@@ -190,6 +191,7 @@ async function openPullOf(auth: GithubAuth, link: Link, head: string): Promise<n
 registerActions([
   defineAction({
     name: 'githubPr.open',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary:
@@ -284,6 +286,7 @@ registerActions([
 
   defineAction({
     name: 'githubPr.update',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary:
@@ -328,6 +331,7 @@ registerActions([
 
   defineAction({
     name: 'githubPr.requestReviewers',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary:
@@ -374,6 +378,7 @@ registerActions([
 
   defineAction({
     name: 'githubPr.comment',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary: 'Comment on a pull request linked to an issue, as your own GitHub account.',
@@ -407,6 +412,7 @@ registerActions([
 
   defineAction({
     name: 'githubPr.merge',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     destructive: true,
@@ -490,6 +496,7 @@ registerActions([
 
   defineAction({
     name: 'githubPr.close',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     destructive: true,
@@ -520,6 +527,7 @@ registerActions([
 
   defineAction({
     name: 'githubChecks.rerun',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary:

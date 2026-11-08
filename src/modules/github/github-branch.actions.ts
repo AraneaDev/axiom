@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
+import { inputPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
@@ -31,6 +32,7 @@ const branchTarget = issueTarget.extend({ branch: z.string().min(1).max(200) });
 registerActions([
   defineAction({
     name: 'githubBranch.create',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     summary:
@@ -113,6 +115,7 @@ registerActions([
 
   defineAction({
     name: 'githubBranch.delete',
+    place: inputPlace,
     area: 'github',
     kind: 'write',
     destructive: true,
