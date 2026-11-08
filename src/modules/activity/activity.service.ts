@@ -19,7 +19,11 @@ export type ActivityAction =
   | 'unlabeled'
   | 'priority_changed'
   | 'type_changed'
-  | 'deleted';
+  | 'deleted'
+  /** Made from a GitHub Issue */
+  | 'imported'
+  /** GitHub changed a field Axiom had changed too: the Axiom value was kept */
+  | 'import_conflict';
 
 /**
  * Log an activity event. Non-critical -- silently catches errors to avoid breaking the main flow.

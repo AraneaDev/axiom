@@ -55,6 +55,9 @@ export { bulkUpdate } from './issue-bulk.service';
  * @param data.dueDate
  * @param options
  * @param options.skipAutomation
+ * @param options.skipMentions - Notify nobody the body mentions (imported text)
+ * @param options.externalAuthorLogin - The GitHub login of an imported issue's author, when the
+ *   creator is the integration user
  * @returns The created issue with assignee, creator, labels, column relations and computed key
  * @throws {AppError} 404 if project not found
  */
@@ -70,7 +73,7 @@ export async function createIssue(
     labels?: string[];
     dueDate?: string;
   },
-  options?: { skipAutomation?: boolean },
+  options?: { skipAutomation?: boolean; skipMentions?: boolean; externalAuthorLogin?: string },
 ) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
@@ -106,6 +109,7 @@ export async function createIssue(
           priority: data.priority ?? 'MEDIUM',
           assigneeId: data.assigneeId,
           creatorId,
+          externalAuthorLogin: options?.externalAuthorLogin,
           columnId: defaultColumn?.id,
           dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
           labels: data.labels
@@ -146,7 +150,7 @@ export async function createIssue(
   if (data.body) await bindStagedAttachments(data.body, { issueId: issue.id }, creatorId);
 
   // Notify @mentioned users in the issue body
-  if (data.body) {
+  if (data.body && !options?.skipMentions) {
     notifyMentions(data.body, creatorId, `/issues/${issue.id}`).catch((err) => {
       logger.error('Failed to send mention notifications', { issueId: issue.id }, err as Error);
     });

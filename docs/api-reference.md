@@ -243,7 +243,7 @@ Read issues and pages by key in one call, with whatever belongs to them. Needs `
 | `413 RESPONSE_TOO_LARGE` | The call reached its 10 MB limit                                                                                                                                 |
 | `409 AMBIGUOUS_KEY`      | A bare `AXM-42` whose prefix is used by projects you can see in more than one team. `details.candidates` lists the full keys. Projects you can't see don't count |
 
-**Issue `data`:** `id`, `key`, `fullKey`, `url`, `number`, `title`, `body`, `type`, `priority`, `status` (the column name), `assignee`, `creator`, `labels`, `sprint`, `parent`, `project`, `storyPoints`, `dueDate`, `startDate`, `timeEstimate`, `timeSpent`, `createdAt`, `updatedAt`.
+**Issue `data`:** `id`, `key`, `fullKey`, `url`, `number`, `title`, `body`, `type`, `priority`, `status` (the column name), `assignee`, `creator`, `externalAuthorLogin` (the GitHub login of an imported issue's author, null otherwise), `labels`, `sprint`, `parent`, `project`, `storyPoints`, `dueDate`, `startDate`, `timeEstimate`, `timeSpent`, `createdAt`, `updatedAt`.
 
 **Page `data`:** `id`, `key`, `url`, `slug`, `title`, `body`, `isDraft`, `parentId`, `space`, `version`, `lastEditedBy`, `createdAt`, `updatedAt`.
 

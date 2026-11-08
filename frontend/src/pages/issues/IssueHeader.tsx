@@ -4,6 +4,7 @@ import { useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { authorName } from '@/lib/authors';
 import { cn, formatRelative } from '@/lib/utils';
 
 interface IssueHeaderProps {
@@ -13,6 +14,7 @@ interface IssueHeaderProps {
     type: string;
     createdAt: string;
     creator?: { displayName: string } | null;
+    externalAuthorLogin?: string | null;
   };
   titleDraft: string;
   isTitleEditing: boolean;
@@ -109,7 +111,7 @@ export function IssueHeader({
         <div className="flex items-center gap-2 mt-1">
           <p className="text-sm text-text-tertiary">
             {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
-            {issue.creator?.displayName}
+            {authorName(issue.creator, issue.externalAuthorLogin)}
           </p>
           <Button
             variant="outline"

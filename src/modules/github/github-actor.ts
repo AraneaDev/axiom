@@ -55,3 +55,25 @@ export async function resolveGithubActor(
     ? { userId: account.userId, login: github.login, mapped: true }
     : { userId: GITHUB_INTEGRATION_USER_ID, login: github.login, mapped: false };
 }
+
+/**
+ * Who a GitHub user writes as in a project: the mapped user when they are a member of the
+ * project's org, else the integration user. A connected account alone never lets someone write
+ * into an org they do not belong to.
+ * @param actor The resolved GitHub actor
+ * @param projectId The project written to
+ * @returns The Axiom user id
+ */
+export async function orgActorId(actor: GithubActor, projectId: string): Promise<string> {
+  if (!actor.mapped) return GITHUB_INTEGRATION_USER_ID;
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { team: { select: { orgId: true } } },
+  });
+  if (!project) return GITHUB_INTEGRATION_USER_ID;
+  const member = await prisma.orgMembership.findFirst({
+    where: { userId: actor.userId, orgId: project.team.orgId },
+    select: { id: true },
+  });
+  return member ? actor.userId : GITHUB_INTEGRATION_USER_ID;
+}

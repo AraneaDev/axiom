@@ -127,8 +127,24 @@ export interface GithubFake {
       pulls?: Array<Record<string, unknown>>;
       checkRuns?: Record<string, Array<Record<string, unknown>>>;
       branches?: Array<{ name: string; sha: string }>;
+      /**
+       * GitHub Issues: `GET .../issues` (by `state`, open by default, pull requests included as
+       * GitHub lists them) and `.../issues/:number`. Commenting works on these as on `pulls`.
+       */
+      issues?: Array<Record<string, unknown>>;
+      /**
+       * The comments of an issue or pull request by number, served by
+       * `GET .../issues/:number/comments`; a comment posted on one is added here. Without it the
+       * fixtures answer that route.
+       */
+      issueComments?: Record<string, Array<Record<string, unknown>>>;
     },
   ): void;
+  /**
+   * The id of a repository, so `/repositories/<id>/...` answers as `/repos/<owner>/<name>/...`
+   * does (an unknown id is 404). Requests are recorded under the path that was asked.
+   */
+  setRepoId(fullName: string, id: number): void;
   /**
    * The branch heads of a repository (`name` to commit sha), served by
    * `GET /repos/:o/:r/git/ref/heads/<name>` (404 "Not Found" for a missing one) and extended by
@@ -150,7 +166,7 @@ export interface GithubFake {
    * Forgotten by `reset`.
    */
   setCollaborators(fullName: string, logins: string[]): void;
-  /** Forgets recorded requests, `on` routes, job logs, repository lists, the comment counter and the refresh counter and delay; the rest stays */
+  /** Forgets recorded requests, `on` routes, job logs, repository lists, the comment counter and the refresh counter and delay; the rest (repository ids included) stays */
   reset(): void;
   close(): Promise<void>;
 }
@@ -469,6 +485,24 @@ class GithubFakeServer implements GithubFake {
     this.repoLists.set(repoKey(fullName), lists);
   }
 
+  setRepoId(fullName: string, id: number): void {
+    this.repoIds.set(repoKey(fullName), id);
+  }
+
+  /**
+   * The `/repos/<owner>/<name>/...` path a `/repositories/<id>/...` path stands for, the path
+   * itself when it is not one, and null for an id the fake does not know.
+   * @param pathname The request path
+   */
+  private byIdPath(pathname: string): string | null {
+    const byId = /^\/repositories\/(\d+)(\/.*)?$/.exec(pathname);
+    if (!byId) return pathname;
+    for (const [key, id] of this.repoIds) {
+      if (id === Number(byId[1])) return `/repos/${key}${byId[2] ?? ''}`;
+    }
+    return null;
+  }
+
   setGitRefs(fullName: string, heads: Record<string, string>): void {
     this.gitRefs.set(repoKey(fullName), new Map(Object.entries(heads)));
   }
@@ -623,10 +657,14 @@ class GithubFakeServer implements GithubFake {
     };
     this.requests.push(recorded);
 
-    const answer =
-      this.refusal(recorded.method, url.pathname, credential) ??
-      this.builtIn(recorded, credential) ??
-      this.fromRoutes(recorded);
+    // A repository addressed by id answers as the same call by name
+    const routedPath = this.byIdPath(url.pathname);
+    const routed = routedPath ? { ...recorded, path: routedPath } : recorded;
+    const answer = !routedPath
+      ? NOT_FOUND
+      : (this.refusal(routed.method, routedPath, credential) ??
+        this.builtIn(routed, credential) ??
+        this.fromRoutes(routed));
     if (answer.delayMs) await new Promise((resolve) => setTimeout(resolve, answer.delayMs));
     if (res.destroyed) return;
 
@@ -824,20 +862,31 @@ class GithubFakeServer implements GithubFake {
     }
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (comment) {
-      const known = this.repoLists
-        .get(key)
-        ?.pulls?.some((pr) => Number(pr.number) === Number(comment[1]));
-      if (!known) return NOT_FOUND;
+      const stored = this.repoLists.get(key);
+      const isNumber = (item: Record<string, unknown>) =>
+        Number(item.number) === Number(comment[1]);
+      const issue = stored?.issues?.some(isNumber);
+      if (!issue && !stored?.pulls?.some(isNumber)) return NOT_FOUND;
       this.commentIds += 1;
-      return {
-        status: 201,
-        body: {
-          id: 5000 + this.commentIds,
-          html_url: `https://github.com/${fullName}/pull/${comment[1]}#issuecomment-${5000 + this.commentIds}`,
-          body: body.body,
-          user: credential.identity ?? { login: 'octo-dev', id: 9101 },
-        },
+      const id = 5000 + this.commentIds;
+      const now = new Date().toISOString();
+      // An installation comments as the App's bot, as on GitHub
+      const app = credential.kind === 'installation';
+      const posted: Record<string, unknown> = {
+        id,
+        html_url: `https://github.com/${fullName}/${issue ? 'issues' : 'pull'}/${comment[1]}#issuecomment-${id}`,
+        body: body.body,
+        user: app
+          ? { login: 'acme-axiom[bot]', id: 9_900_001, type: 'Bot' }
+          : (credential.identity ?? { login: 'octo-dev', id: 9101 }),
+        ...(app && {
+          performed_via_github_app: { id: this.app?.appId ?? null, slug: 'acme-axiom' },
+        }),
+        created_at: now,
+        updated_at: now,
       };
+      if (stored?.issueComments) (stored.issueComments[comment[1]] ??= []).push(posted);
+      return { status: 201, body: posted };
     }
 
     let lists = this.repoLists.get(key);
@@ -1064,6 +1113,19 @@ class GithubFakeServer implements GithubFake {
     }
     if (rest === 'branches' && lists.branches) {
       return page(lists.branches.map((b) => ({ name: b.name, commit: { sha: b.sha } })));
+    }
+    if (rest === 'issues' && lists.issues) {
+      const wanted = req.query.state ?? 'open';
+      return page(lists.issues.filter((item) => wanted === 'all' || item.state === wanted));
+    }
+    const issue = /^issues\/(\d+)$/.exec(rest);
+    if (issue && lists.issues) {
+      const found = lists.issues.find((item) => Number(item.number) === Number(issue[1]));
+      return found ? { status: 200, body: found } : NOT_FOUND;
+    }
+    const issueComments = /^issues\/(\d+)\/comments$/.exec(rest);
+    if (issueComments && lists.issueComments) {
+      return page(lists.issueComments[issueComments[1]] ?? []);
     }
     return null;
   }

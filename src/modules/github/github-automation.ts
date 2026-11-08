@@ -8,9 +8,9 @@ import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automatio
 import type { AutomationContext, AutomationTrigger } from '../automation/automation.service';
 
 import { isFailed, newestRuns } from './checks.service';
+import { orgActorId } from './github-actor';
 import { outsideGithubCallCount } from './github-client';
 import { onGithubOutcome, type GithubEventOutcome, type GithubTransition } from './github-outcomes';
-import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 
 /** The trigger each transition sets off; a draft PR's opening fires when it becomes ready */
 export const TRANSITION_TRIGGERS: Record<GithubTransition, AutomationTrigger> = {
@@ -171,19 +171,8 @@ async function guardedOutbound(
 }
 
 // The mapped user, when they are a member of the project's org; else the integration user
-async function actorIdOf(outcome: GithubEventOutcome): Promise<string> {
-  if (!outcome.actor.mapped) return GITHUB_INTEGRATION_USER_ID;
-  const project = await prisma.project.findUnique({
-    where: { id: outcome.projectId },
-    select: { team: { select: { orgId: true } } },
-  });
-  if (!project) return GITHUB_INTEGRATION_USER_ID;
-  const member = await prisma.orgMembership.findFirst({
-    where: { userId: outcome.actor.userId, orgId: project.team.orgId },
-    select: { id: true },
-  });
-  return member ? outcome.actor.userId : GITHUB_INTEGRATION_USER_ID;
-}
+const actorIdOf = (outcome: GithubEventOutcome): Promise<string> =>
+  orgActorId(outcome.actor, outcome.projectId);
 
 const prContext = (pr: GithubPullRequest): NonNullable<GithubTriggerContext['pr']> => ({
   number: pr.number,

@@ -1,0 +1,25 @@
+{
+  "route": "GET /repos/:owner/:repo/issues/:number/comments",
+  "status": 200,
+  "body": [
+    {
+      "id": 9301,
+      "node_id": "IC_kwDOexample9301",
+      "body": "I can reproduce this on the latest release.",
+      "user": { "login": "outside-dev", "id": 7002, "type": "User" },
+      "html_url": "https://github.com/acme-labs/widget/issues/31#issuecomment-9301",
+      "created_at": "2026-11-07T09:30:00Z",
+      "updated_at": "2026-11-07T09:30:00Z"
+    },
+    {
+      "id": 9302,
+      "node_id": "IC_kwDOexample9302",
+      "body": "Thanks for the report, a maintainer will look at it.",
+      "user": { "login": "triage-helper[bot]", "id": 7003, "type": "Bot" },
+      "performed_via_github_app": { "id": 4400, "slug": "triage-helper" },
+      "html_url": "https://github.com/acme-labs/widget/issues/31#issuecomment-9302",
+      "created_at": "2026-11-07T09:31:00Z",
+      "updated_at": "2026-11-07T09:31:00Z"
+    }
+  ]
+}

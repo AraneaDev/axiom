@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { authorName } from '@/lib/authors';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -144,11 +145,11 @@ export function IssueDetailComments({
           {sortedComments.map((comment) => (
             <div key={comment.id} className="relative flex gap-3 group">
               <div className="relative z-10 shrink-0">
-                <Avatar name={comment.author.displayName} size="sm" />
+                <Avatar name={authorName(comment.author, comment.externalAuthorLogin)} size="sm" />
               </div>
               <Card className="flex-1 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary/40 border-b border-border-light">
-                  {orgSlug && teamSlug ? (
+                  {orgSlug && teamSlug && !comment.externalAuthorLogin ? (
                     <Link
                       to={`/${orgSlug}/${teamSlug}/members/${comment.author.username}`}
                       className="text-sm font-medium text-text hover:text-primary transition-colors"
@@ -157,7 +158,7 @@ export function IssueDetailComments({
                     </Link>
                   ) : (
                     <span className="text-sm font-medium text-text">
-                      {comment.author.displayName}
+                      {authorName(comment.author, comment.externalAuthorLogin)}
                     </span>
                   )}
                   <span className="text-xs text-text-tertiary">

@@ -115,6 +115,8 @@ export interface Issue {
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   assignee?: { id: string; username: string; displayName: string };
   creator: { id: string; username: string; displayName: string };
+  /** The GitHub login of an imported issue's author, when the creator is the integration user */
+  externalAuthorLogin?: string | null;
   labels: Label[];
   column?: { id: string; name: string; isDone?: boolean };
   comments?: Comment[];
@@ -177,6 +179,8 @@ export interface Comment {
   id: string;
   body: string;
   author: { id: string; username: string; displayName: string };
+  /** The GitHub login of an imported comment's author, when the author is the integration user */
+  externalAuthorLogin?: string | null;
   createdAt: string;
   updatedAt: string;
 }

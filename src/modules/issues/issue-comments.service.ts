@@ -15,11 +15,20 @@ import { createNotification } from '../notifications/notifications.service';
  * @param issueId - The issue to comment on
  * @param authorId - The user authoring the comment
  * @param body - The comment body text
+ * @param options
+ * @param options.skipMentions - Notify nobody the body mentions (imported text)
+ * @param options.externalAuthorLogin - The GitHub login of an imported comment's author, when the
+ *   author is the integration user
  * @returns The created comment with author relation
  */
-export async function addComment(issueId: string, authorId: string, body: string) {
+export async function addComment(
+  issueId: string,
+  authorId: string,
+  body: string,
+  options?: { skipMentions?: boolean; externalAuthorLogin?: string },
+) {
   const comment = await prisma.comment.create({
-    data: { issueId, authorId, body },
+    data: { issueId, authorId, body, externalAuthorLogin: options?.externalAuthorLogin },
     include: { author: { select: USER_BASIC_SELECT } },
   });
 
@@ -54,9 +63,11 @@ export async function addComment(issueId: string, authorId: string, body: string
   }
 
   // Notify @mentioned users in the comment
-  notifyMentions(body, authorId, issueUrl).catch((err) => {
-    logger.error('Failed to send mention notifications', { issueId }, err as Error);
-  });
+  if (!options?.skipMentions) {
+    notifyMentions(body, authorId, issueUrl).catch((err) => {
+      logger.error('Failed to send mention notifications', { issueId }, err as Error);
+    });
+  }
 
   // Broadcast to project room -- look up projectId from the issue
   const issueForBroadcast = await prisma.issue.findUnique({

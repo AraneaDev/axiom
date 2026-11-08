@@ -316,6 +316,9 @@ model Issue {
   id                    String                 @id @default(cuid())
   githubLinks           GithubIssueLink[]
   githubAutomationMarks GithubAutomationMark[]
+  githubImport          GithubIssueImport?
+  /// The GitHub login of the author of an imported issue whose creator is the integration user
+  externalAuthorLogin   String?
   projectId             String
   project               Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
   number                Int // sequential within project
@@ -425,17 +428,20 @@ model IssueLink {
 }
 
 model Comment {
-  id       String @id @default(cuid())
-  issueId  String
-  issue    Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  authorId String
-  author   User   @relation(fields: [authorId], references: [id])
-  body     String // markdown
+  id                  String  @id @default(cuid())
+  issueId             String
+  issue               Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  authorId            String
+  author              User    @relation(fields: [authorId], references: [id])
+  body                String // markdown
+  /// The GitHub login of the author of an imported comment whose author is the integration user
+  externalAuthorLogin String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  attachments Attachment[]
+  attachments  Attachment[]
+  githubImport GithubImportedComment?
 
   @@index([issueId])
   @@map("comments")
@@ -1469,14 +1475,56 @@ model GithubRepoLink {
   lastReconcileNote     String?
   /// When the default rules were made for this link; set once, so a rule the team deleted never returns
   defaultRulesCreatedAt DateTime?
+  /// Whether the repository's GitHub Issues are imported into the project
+  importIssues          Boolean             @default(false)
   project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issueLinks            GithubIssueLink[]
   branches              GithubBranch[]
   pullRequests          GithubPullRequest[]
   commits               GithubCommit[]
   checkRuns             GithubCheckRun[]
+  issueImports          GithubIssueImport[]
 
   @@map("github_repo_links")
+}
+
+/// A GitHub Issue imported into the linked project, with what the last import wrote per field
+model GithubIssueImport {
+  id                   String                  @id @default(cuid())
+  repoLinkId           String
+  githubIssueNumber    Int
+  githubIssueId        String
+  issueId              String                  @unique
+  /// The title, SHA-256 of the body and label names last taken from GitHub
+  mirroredTitle        String
+  mirroredBodyHash     String
+  mirroredLabels       String[]
+  /// The App's comment on GitHub with the Axiom link, once it is posted
+  linkCommentId        String?
+  /// When a run took the posting of the link comment; one older than 10 minutes may be taken again
+  linkCommentClaimedAt DateTime?
+  githubUpdatedAt      DateTime
+  lastImportedAt       DateTime
+  repoLink             GithubRepoLink          @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  issue                Issue                   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  comments             GithubImportedComment[]
+
+  @@unique([repoLinkId, githubIssueNumber])
+  @@map("github_issue_imports")
+}
+
+/// A GitHub comment imported onto an imported issue, with the hash of the body last taken
+model GithubImportedComment {
+  githubCommentId  String            @id
+  importId         String
+  commentId        String            @unique
+  mirroredBodyHash String
+  githubUpdatedAt  DateTime
+  import           GithubIssueImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  comment          Comment           @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([importId])
+  @@map("github_imported_comments")
 }
 
 /// One GitHub comment already made by a rule for an issue, trigger, subject (PR or branch id) and head commit
