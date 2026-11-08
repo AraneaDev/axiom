@@ -15,7 +15,8 @@ model User {
   displayName  String
   passwordHash String
   avatarUrl    String?
-  /// PERSON signs in; INTEGRATION is a built-in author for events from another system and never does
+  /// PERSON signs in; INTEGRATION is a built-in author for events from another system and never does;
+  /// SERVICE is an org's bot, with a ServiceAccount row, that acts through its own tokens only
   kind         UserKind @default(PERSON)
 
   // Platform admin
@@ -68,6 +69,9 @@ model User {
   approvalVotes           ApprovalVote[]
   formsCreated            Form[]                   @relation("formCreator")
   submissionsReviewed     FormSubmission[]         @relation("submissionReviewer")
+  serviceAccount          ServiceAccount?          @relation("ServiceAccountUser")
+  serviceAccountsCreated  ServiceAccount[]         @relation("ServiceAccountCreator")
+  ownedServiceAccounts    ServiceAccountOwner[]
 
   @@map("users")
 }
@@ -164,12 +168,58 @@ model Organization {
   dashboards   Dashboard[]
   agentPolicy  AgentPolicy?
 
+  serviceAccounts ServiceAccount[]
+
   @@map("organizations")
 }
 
 enum UserKind {
   PERSON
   INTEGRATION
+  SERVICE
+}
+
+enum ServiceAccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ServiceAccountSuspension {
+  ORPHANED
+  MANUAL
+}
+
+/// A bot of one org: the User row (kind SERVICE) is its identity, this row its org and status
+model ServiceAccount {
+  userId          String                    @id
+  user            User                      @relation("ServiceAccountUser", fields: [userId], references: [id], onDelete: Cascade)
+  orgId           String
+  org             Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdById     String?
+  createdBy       User?                     @relation("ServiceAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  description     String                    @default("")
+  status          ServiceAccountStatus      @default(ACTIVE)
+  suspendedReason ServiceAccountSuspension?
+  suspendedAt     DateTime?
+  createdAt       DateTime                  @default(now())
+
+  owners ServiceAccountOwner[]
+
+  @@index([orgId])
+  @@map("service_accounts")
+}
+
+/// A person who answers for a bot: approves its requests and manages its tokens
+model ServiceAccountOwner {
+  serviceAccountId String
+  serviceAccount   ServiceAccount @relation(fields: [serviceAccountId], references: [userId], onDelete: Cascade)
+  ownerId          String
+  owner            User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+
+  @@id([serviceAccountId, ownerId])
+  @@index([ownerId])
+  @@map("service_account_owners")
 }
 
 enum OrgRole {

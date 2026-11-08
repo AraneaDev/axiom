@@ -12,6 +12,7 @@ import {
   USER_WITH_AVATAR_SELECT,
 } from '../../utils/prisma-selects';
 import { isIntegrationUser } from '../github/integration-user';
+import { assertPersonTarget } from '../service-accounts/person';
 
 // ─── Profile ────────────────────────────────────────────────
 
@@ -314,6 +315,12 @@ export async function createApiToken(
   if (isIntegrationUser(userId)) {
     throw new AppError(400, 'The GitHub integration user cannot have API tokens');
   }
+  // A bot's tokens are made by its owners from its own page, never as a personal token
+  await assertPersonTarget(
+    userId,
+    'SERVICE_ACCOUNT_TOKEN_ELSEWHERE',
+    "A service account's tokens are created from its own page",
+  );
   if (!data.scopes.every(isMintableScope)) {
     throw new AppError(400, 'Unknown token scope, or one no action uses yet');
   }

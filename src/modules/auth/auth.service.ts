@@ -20,8 +20,8 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { logAudit } from '../audit/audit.service';
-import { isIntegrationUser } from '../github/integration-user';
 import { redeemableInviteRole } from '../orgs/org-roles';
+import { isPerson } from '../service-accounts/person';
 
 const SALT_ROUNDS = 12;
 
@@ -306,10 +306,10 @@ export async function login(data: { login: string; password: string; twoFactorCo
     throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
   }
 
-  // The integration user has no password hash to compare with: it is checked against a real
-  // bcrypt hash, so the refusal takes as long as a wrong password and reads the same
+  // The integration user and bots have no password hash to compare with: it is checked against a
+  // real bcrypt hash, so the refusal takes as long as a wrong password and reads the same
   let valid: boolean;
-  if (isIntegrationUser(user.id)) {
+  if (user.kind !== 'PERSON') {
     await bcrypt.compare(data.password, await refusedAccountHash());
     valid = false;
   } else {
@@ -387,7 +387,7 @@ export async function refresh(refreshTokenValue: string) {
   const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
 
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  if (!stored || stored.expiresAt < new Date() || isIntegrationUser(stored.userId)) {
+  if (!stored || stored.expiresAt < new Date() || !(await isPerson(stored.userId))) {
     throw new AppError(401, 'Invalid or expired refresh token', 'INVALID_REFRESH');
   }
 
@@ -445,6 +445,7 @@ export async function enableTwoFactor(userId: string) {
     prisma.user.findUnique({ where: { id: userId } }),
     ERR.USER_NOT_FOUND,
   );
+  if (user.kind !== 'PERSON') throw new AppError(400, 'Only a person can set up 2FA');
   if (user.twoFactorEnabled) throw new AppError(400, '2FA already enabled');
 
   const secret = generateSecret();
@@ -539,7 +540,7 @@ const PASSWORD_RESET_TTL_HOURS = 1;
  */
 export async function requestPasswordReset(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || isIntegrationUser(user.id)) return { success: true };
+  if (!user || user.kind !== 'PERSON') return { success: true };
 
   logAudit({
     userId: user.id,
@@ -586,7 +587,7 @@ export async function resetPassword(token: string, newPassword: string) {
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const stored = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
 
-  if (!stored || stored.expiresAt < new Date() || isIntegrationUser(stored.userId)) {
+  if (!stored || stored.expiresAt < new Date() || !(await isPerson(stored.userId))) {
     throw new AppError(400, 'Invalid or expired reset token', 'INVALID_RESET_TOKEN');
   }
 

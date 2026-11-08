@@ -6,6 +6,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { isIntegrationUser } from '../github/integration-user';
+import { assertPersonTarget } from '../service-accounts/person';
 
 import {
   assertCanGrantOrgRole,
@@ -68,6 +69,7 @@ export async function getOrg(orgId: string, viewerId?: string) {
           },
         },
         members: {
+          where: { user: { kind: 'PERSON' } },
           include: {
             user: { select: { id: true, username: true, displayName: true, email: true } },
           },
@@ -151,7 +153,8 @@ export async function deleteOrg(orgId: string) {
  */
 export async function listOrgMembers(orgId: string) {
   return prisma.orgMembership.findMany({
-    where: { orgId },
+    // People only: bots are listed with the org's service accounts, never offered in a picker
+    where: { orgId, user: { kind: 'PERSON' } },
     include: { user: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'asc' },
   });
@@ -176,6 +179,12 @@ export async function addOrgMember(
   if (isIntegrationUser(userId)) {
     throw new AppError(400, 'The GitHub integration user cannot join an organization');
   }
+  // A bot joins its one org when it is created, never by being added
+  await assertPersonTarget(
+    userId,
+    'SERVICE_ACCOUNT_NOT_INVITABLE',
+    'A service account cannot be added to an organization',
+  );
   if (actorId) await assertCanGrantOrgRole(orgId, actorId, role);
   await checkUnique('orgMembership', { userId, orgId }, 'User is already a member');
 

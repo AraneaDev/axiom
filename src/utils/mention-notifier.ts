@@ -20,7 +20,8 @@ export async function notifyMentions(
 
   const [users, author] = await Promise.all([
     prisma.user.findMany({
-      where: { username: { in: usernames } },
+      // `@botname` notifies nobody: only people are mentioned
+      where: { username: { in: usernames }, kind: 'PERSON' },
       select: { id: true, username: true },
     }),
     prisma.user.findUnique({

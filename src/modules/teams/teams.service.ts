@@ -61,7 +61,9 @@ export async function getTeam(teamId: string) {
     prisma.team.findUnique({
       where: { id: teamId },
       include: {
+        // People only: the assignee and member pickers read this list, and a bot is never offered
         members: {
+          where: { user: { kind: 'PERSON' } },
           include: {
             user: {
               select: {
@@ -175,7 +177,8 @@ export async function listTeamMembers(teamId: string) {
   );
 
   return prisma.teamMembership.findMany({
-    where: { teamId },
+    // People only, as in getTeam: a bot is never offered as a member
+    where: { teamId, user: { kind: 'PERSON' } },
     include: {
       user: {
         select: {
@@ -208,6 +211,7 @@ export async function addTeamMember(
   userId: string,
   role: TeamRole = TeamRole.MEMBER,
 ) {
+  // A bot does join teams, like a member: the rules for where and in what role are its own
   if (isIntegrationUser(userId)) {
     throw new AppError(400, 'The GitHub integration user cannot join a team');
   }

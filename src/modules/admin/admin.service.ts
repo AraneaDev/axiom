@@ -43,6 +43,24 @@ function assertNotIntegrationUser(userId: string) {
   }
 }
 
+/**
+ * A service account is managed from its org's service accounts: its org role is fixed, it has no
+ * password or 2FA, and deleting it there keeps its past activity. The platform admin pages only
+ * deactivate and reactivate it.
+ * @param user - The user the admin acts on
+ * @param user.kind - Its kind
+ * @throws {AppError} 400 for a service account
+ */
+function assertNotServiceAccount(user: { kind: string }) {
+  if (user.kind === 'SERVICE') {
+    throw new AppError(
+      400,
+      "A service account is managed from its organization's service accounts",
+      'SERVICE_ACCOUNT_MANAGED_BY_ORG',
+    );
+  }
+}
+
 // ─── System Stats ───────────────────────────────────────────
 
 function getDirectorySize(dirPath: string): number {
@@ -196,7 +214,9 @@ export async function getUser(userId: string) {
  */
 export async function updateUser(userId: string, data: { role?: string; disabled?: boolean }) {
   assertNotIntegrationUser(userId);
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
+  assertNotServiceAccount(
+    await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND),
+  );
 
   // Update org membership role if provided. In every org where the user is the last OWNER,
   // the change is refused: an org must keep an OWNER (checked under the OWNER row lock)
@@ -224,7 +244,9 @@ export async function updateUser(userId: string, data: { role?: string; disabled
  */
 export async function deleteUser(userId: string) {
   assertNotIntegrationUser(userId);
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
+  assertNotServiceAccount(
+    await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND),
+  );
 
   // Deleting the last OWNER of an org would leave it unmanageable: transfer ownership first
   const guardLastOwner = async (tx: Prisma.TransactionClient) => {
@@ -296,7 +318,9 @@ export async function reactivateUser(userId: string) {
  */
 export async function resetUserPassword(userId: string, newPassword: string) {
   assertNotIntegrationUser(userId);
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
+  assertNotServiceAccount(
+    await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND),
+  );
 
   const bcrypt = await import('bcryptjs');
   const passwordHash = await bcrypt.hash(newPassword, 12);
@@ -328,7 +352,9 @@ export async function resetUserTwoFactor(actorId: string, userId: string) {
       "You can't reset your own 2FA: use the normal disable with a code from your authenticator in your account settings",
     );
   }
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
+  assertNotServiceAccount(
+    await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND),
+  );
 
   await prisma.$transaction([
     prisma.user.update({

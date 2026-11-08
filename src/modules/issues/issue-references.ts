@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
-import { isIntegrationUser } from '../github/integration-user';
+import { isPerson } from '../service-accounts/person';
 import { validateTransition } from '../workflows/workflows.service';
 
 /**
@@ -49,7 +49,8 @@ export async function assertAssignable(
   assigneeId: string | null | undefined,
 ): Promise<void> {
   if (!assigneeId) return;
-  if (isIntegrationUser(assigneeId)) {
+  // The integration user and bots are never assigned, even a bot that is on the team
+  if (!(await isPerson(assigneeId))) {
     throw new AppError(400, 'The assignee must be a member of the project team');
   }
   const member = await prisma.teamMembership.findFirst({

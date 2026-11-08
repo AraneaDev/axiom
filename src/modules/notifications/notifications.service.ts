@@ -3,7 +3,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
-import { isIntegrationUser } from '../github/integration-user';
+import { isPerson } from '../service-accounts/person';
 
 /**
  * Create a notification and broadcast it to the user via WebSocket.
@@ -21,8 +21,8 @@ export async function createNotification(
   body?: string,
   link?: string,
 ) {
-  // The GitHub integration user is never notified: no row, no broadcast, no email
-  if (isIntegrationUser(userId)) return null;
+  // Only people are notified: the GitHub integration user and bots get no row, broadcast or email
+  if (!(await isPerson(userId))) return null;
 
   const notification = await prisma.notification.create({
     data: { userId, type, title, body, link, read: false },
