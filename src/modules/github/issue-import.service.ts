@@ -26,7 +26,12 @@ import {
   type GithubAuth,
 } from './github-client';
 import { githubUser, text, timestamp } from './github-store';
-import { ImportCappedError, releaseImportSlot, takeImportSlot } from './import-cap';
+import {
+  ImportCappedError,
+  LINK_COMMENT_WINDOWS,
+  releaseImportSlot,
+  takeImportSlot,
+} from './import-cap';
 import { isIntegrationUser } from './integration-user';
 
 // Axiom's own limits: the issue title and body (issue-validators.ts), a comment body and a label
@@ -38,6 +43,8 @@ const LABEL_NAME_MAX = 100;
 const LABELS_MAX = 20;
 /** A claim on the link comment older than this belongs to a run that died: it may be taken */
 export const LINK_CLAIM_TTL_MS = 10 * 60_000;
+/** Failed posts of one link comment (rate limits not counted) after which it is given up */
+const LINK_COMMENT_TRIES = 5;
 /** How long an import waits for another one of the same issue before it gives up (and retries) */
 const LOCK_WAIT_MS = 30_000;
 /** How long the database part of one import may hold the issue */
@@ -648,14 +655,76 @@ const isPermanent = (err: unknown) =>
   err instanceof AppError && (err.code === 'GITHUB_NOT_FOUND' || err.code === 'GITHUB_GONE');
 
 /**
+ * The link comments a link posted (or has a live claim out for) since a time: what the windows of
+ * LINK_COMMENT_WINDOWS count. A failed post leaves a stale claim and is not counted.
+ * @param repoLinkId The link
+ * @param since From when
+ * @param db The client, or the transaction that holds the link's comment lock
+ */
+export function linkCommentsSince(
+  repoLinkId: string,
+  since: Date,
+  db: Pick<typeof prisma, 'githubIssueImport'> = prisma,
+): Promise<number> {
+  const live = new Date(Math.max(since.getTime(), Date.now() - LINK_CLAIM_TTL_MS));
+  return db.githubIssueImport.count({
+    where: {
+      repoLinkId,
+      OR: [
+        { linkCommentId: { not: null }, linkCommentClaimedAt: { gte: since } },
+        { linkCommentId: null, linkCommentClaimedAt: { gte: live } },
+      ],
+    },
+  });
+}
+
+/**
+ * When a full window of the link frees a place again: an hour (say) after the oldest link comment
+ * it counts.
+ * @param repoLinkId The link
+ * @param windowMs The window
+ */
+export async function linkCommentWindowOpensAt(
+  repoLinkId: string,
+  windowMs: number,
+): Promise<Date> {
+  const since = new Date(Date.now() - windowMs);
+  const oldest = await prisma.githubIssueImport.findFirst({
+    where: {
+      repoLinkId,
+      OR: [
+        { linkCommentId: { not: null }, linkCommentClaimedAt: { gte: since } },
+        {
+          linkCommentId: null,
+          linkCommentClaimedAt: {
+            gte: new Date(Math.max(since.getTime(), Date.now() - LINK_CLAIM_TTL_MS)),
+          },
+        },
+      ],
+    },
+    orderBy: { linkCommentClaimedAt: 'asc' },
+    select: { linkCommentClaimedAt: true },
+  });
+  const at = oldest?.linkCommentClaimedAt ?? new Date();
+  return new Date(at.getTime() + windowMs);
+}
+
+/** What became of a call to post a link comment */
+export type LinkCommentOutcome = 'posted' | 'held' | 'skipped';
+
+/**
  * Posts the one comment Axiom makes on an imported GitHub Issue, as the App's installation, with
  * the Axiom link. A run claims it on the import row first, so it is posted once however many
  * runs try. A claim older than 10 minutes without a comment id belongs to a run that died (or
  * failed): the run that takes it over first looks for the comment that run may have made. When
- * GitHub answers 404 or 410 the row notes it and nothing tries again.
+ * GitHub answers 404 or 410, or refuses it 5 times, the row notes it and nothing tries again; a
+ * refused one goes to the back of the queue. It is held (left owed) while the link's hourly
+ * ceiling of link comments is reached, or while a backfill of the link waits for GitHub's rate
+ * limit, which then posts it.
  * @param importId The import
+ * @returns `posted` (or found already made), `held`, or `skipped` when there is nothing to do
  */
-export async function postLinkComment(importId: string): Promise<void> {
+export async function postLinkComment(importId: string): Promise<LinkCommentOutcome> {
   const row = await prisma.githubIssueImport.findUnique({
     where: { id: importId },
     include: {
@@ -670,16 +739,39 @@ export async function postLinkComment(importId: string): Promise<void> {
       },
     },
   });
-  if (!row || row.linkCommentId || row.linkCommentGivenUpAt || !row.issue) return;
+  if (!row || row.linkCommentId || row.linkCommentGivenUpAt || !row.issue) return 'skipped';
   const previous = row.linkCommentClaimedAt;
-  if (previous && previous.getTime() > Date.now() - LINK_CLAIM_TTL_MS) return;
+  if (previous && previous.getTime() > Date.now() - LINK_CLAIM_TTL_MS) return 'skipped';
   const claimedAt = new Date();
-  // Taken only from the state that was read: another run that claimed in the meantime wins
-  const { count } = await prisma.githubIssueImport.updateMany({
-    where: { id: importId, linkCommentId: null, linkCommentClaimedAt: previous },
-    data: { linkCommentClaimedAt: claimedAt },
+  const claim = await prisma.$transaction(async (tx) => {
+    // One claim of the link at a time, so its windows are never overrun by two at once
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-link-comments:${row.repoLinkId}`}, 0))`;
+    const waiting = await tx.githubImportRun.count({
+      where: {
+        repoLinkId: row.repoLinkId,
+        status: 'PAUSED',
+        error: null,
+        resumeAt: { gt: claimedAt },
+      },
+    });
+    if (waiting > 0) return 'held' as const;
+    for (const window of LINK_COMMENT_WINDOWS) {
+      if (!window.shared) continue;
+      const used = await linkCommentsSince(
+        row.repoLinkId,
+        new Date(claimedAt.getTime() - window.ms),
+        tx,
+      );
+      if (used >= window.limit) return 'held' as const;
+    }
+    // Taken only from the state that was read: another run that claimed in the meantime wins
+    const { count } = await tx.githubIssueImport.updateMany({
+      where: { id: importId, linkCommentId: null, linkCommentClaimedAt: previous },
+      data: { linkCommentClaimedAt: claimedAt },
+    });
+    return count === 0 ? ('skipped' as const) : ('claimed' as const);
   });
-  if (count === 0) return;
+  if (claim !== 'claimed') return claim;
 
   const { project } = row.issue;
   const key = formatIssueKey(project.prefix, row.issue.number);
@@ -711,18 +803,41 @@ export async function postLinkComment(importId: string): Promise<void> {
         data: { linkCommentGivenUpAt: new Date() },
       });
       logger.warn('github link comment given up', { importId, code: (err as AppError).code });
-      return;
+      return 'skipped';
     }
-    // Stale at once, so the next run may take it, but with this claim's time kept: that run
-    // looks from here for a comment this one may have made before it failed
-    await prisma.githubIssueImport
-      .updateMany({
+    // Stale at once, so the next run may take it. The next run looks for a comment made since
+    // the earliest claim that may have made one, so that time is kept: this claim's, or an
+    // earlier failed one's
+    const backdated = new Date(claimedAt.getTime() - LINK_CLAIM_TTL_MS);
+    const from = previous && previous < backdated ? previous : backdated;
+    const limited = err instanceof AppError && err.code === 'GITHUB_RATE_LIMITED';
+    await (async () => {
+      await prisma.githubIssueImport.updateMany({
         where: { id: importId, linkCommentId: null, linkCommentClaimedAt: claimedAt },
-        data: { linkCommentClaimedAt: new Date(claimedAt.getTime() - LINK_CLAIM_TTL_MS) },
-      })
-      .catch(() => undefined);
+        // A refusal sends it to the back of the queue; a rate limit is no fault of the comment
+        data: limited
+          ? { linkCommentClaimedAt: from }
+          : {
+              linkCommentClaimedAt: from,
+              linkCommentFailures: { increment: 1 },
+              lastImportedAt: new Date(),
+            },
+      });
+      if (limited) return;
+      const given = await prisma.githubIssueImport.updateMany({
+        where: {
+          id: importId,
+          linkCommentId: null,
+          linkCommentGivenUpAt: null,
+          linkCommentFailures: { gte: LINK_COMMENT_TRIES },
+        },
+        data: { linkCommentGivenUpAt: new Date() },
+      });
+      if (given.count > 0) logger.warn('github link comment given up after retries', { importId });
+    })().catch(() => undefined);
     throw err;
   }
+  return 'posted';
 }
 
 /**
@@ -737,7 +852,8 @@ export async function postPendingLinkComments(repoLinkId: string, limit = 20): P
   const ids = await pendingLinkCommentIds(repoLinkId, limit);
   for (const id of ids) {
     try {
-      await postLinkComment(id);
+      // The hour is full, or a backfill waits for GitHub: the rest wait too
+      if ((await postLinkComment(id)) === 'held') break;
     } catch (err) {
       logger.warn('github link comment failed', {
         importId: id,

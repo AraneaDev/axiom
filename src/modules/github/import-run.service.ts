@@ -13,20 +13,18 @@ import { publishRealtime } from '../../realtime/bridge';
 import { logger } from '../../utils/logger';
 
 import { githubRequest, outsideGithubCallCount, type GithubAuth } from './github-client';
-import { importCapState } from './import-cap';
+import { IMPORT_PACE, LINK_COMMENT_WINDOWS, importCapState } from './import-cap';
 import {
   importGithubIssue,
+  linkCommentWindowOpensAt,
+  linkCommentsSince,
   pendingLinkCommentIds,
   postLinkComment,
   type GithubIssuePayload,
 } from './issue-import.service';
 
-/**
- * How fast a backfill goes: new issues imported per tick of the worker (one every 15 s), and link
- * comments posted per minute and link. The live imports of webhooks have their own hourly cap
- * (LIVE_IMPORT_CAP) and do not share this pace.
- */
-export const IMPORT_PACE = { issuesPerTick: 25, linkCommentsPerMinute: 20 } as const;
+// The pace lives beside the live cap, which postLinkComment shares the hourly ceiling with
+export { IMPORT_PACE } from './import-cap';
 
 /** The states of a run that is not over: at most one of them per link */
 export const ACTIVE_IMPORT_RUN = ['QUEUED', 'RUNNING', 'PAUSED'] as const;
@@ -40,7 +38,12 @@ const PAGES_PER_TICK = 5;
 const RETRY_AFTER_FAILURE_MS = 60_000;
 /** When GitHub's rate limit names no time */
 const DEFAULT_RETRY_SECONDS = 60;
-const MINUTE_MS = 60_000;
+/** A window no longer than this only paces the ticks; a longer full one makes the run wait */
+const TICK_SCALE_MS = 60_000;
+/** Ticks in a row that fail with an error after which the run is FAILED */
+const MAX_ERROR_TICKS = 10;
+/** How long a run may go without moving on before it is FAILED */
+const STALL_MS = 24 * 60 * 60_000;
 
 // The passes of a run (GithubImportRun.pass)
 const FIRST_PASS = 1;
@@ -70,7 +73,7 @@ const retryAfterMs = (err: AppError) => {
 /** A run's progress, as the status action and the settings page show it */
 export type ImportRunView = Pick<
   GithubImportRun,
-  'status' | 'total' | 'done' | 'failed' | 'startedAt' | 'finishedAt' | 'error'
+  'status' | 'total' | 'done' | 'failed' | 'startedAt' | 'finishedAt' | 'error' | 'resumeAt'
 >;
 
 /**
@@ -81,6 +84,14 @@ export type ImportRunView = Pick<
 function broadcastProgress(projectId: string, runId: string): void {
   publishRealtime(`project:${projectId}`, { type: 'github:import-progress', projectId, runId });
 }
+
+/** The state a tick moves a run to when it lets go */
+type RunChange = Partial<
+  Pick<
+    GithubImportRun,
+    'status' | 'resumeAt' | 'error' | 'finishedAt' | 'errorTicks' | 'progressAt'
+  >
+>;
 
 /** What a tick learned, written to the run when it lets go */
 type TickState = {
@@ -124,10 +135,13 @@ export async function runImportTick(runId: string): Promise<void> {
     include: { repoLink: true },
   });
   const link = run.repoLink;
-  const firstStart = run.startedAt === null;
-  if (firstStart) {
-    await prisma.githubImportRun.update({ where: { id: runId }, data: { startedAt: now } });
+  if (run.startedAt === null) {
+    await prisma.githubImportRun.update({
+      where: { id: runId },
+      data: { startedAt: now, progressAt: now },
+    });
   }
+  const lastProgress = run.progressAt ?? run.startedAt ?? now;
 
   const state: TickState = {
     total: run.total,
@@ -138,7 +152,13 @@ export async function runImportTick(runId: string): Promise<void> {
     doneBeforePage: run.doneBeforePage,
     failedNumbers: [...run.failedNumbers],
   };
-  const progress = () => ({ ...state });
+  const before = { ...state };
+  let posted = 0;
+  const movedOn = () =>
+    posted > 0 ||
+    state.done !== before.done ||
+    state.nextPage !== before.nextPage ||
+    state.pass !== before.pass;
 
   // Pushes the lease out while it is still this tick's and the run was not cancelled
   const extend = async (): Promise<boolean> => {
@@ -151,11 +171,20 @@ export async function runImportTick(runId: string): Promise<void> {
     lease = next;
     return true;
   };
-  // Lets go of the run: what the tick learned, and the run's next state when it has one
-  const release = async (
-    next: Partial<Pick<GithubImportRun, 'status' | 'resumeAt' | 'error' | 'finishedAt'>> = {},
-  ) => {
-    const data = { ...progress(), leaseUntil: null };
+  // Lets go of the run: what the tick learned, and the run's next state when it has one. A run
+  // that has not moved on for a day is FAILED, whatever it waited for.
+  const release = async (next: RunChange = {}) => {
+    const data = { ...state, leaseUntil: null, ...(movedOn() && { progressAt: new Date() }) };
+    const over = next.status === 'DONE' || next.status === 'FAILED' || next.status === 'CANCELLED';
+    if (!over && !movedOn() && Date.now() - lastProgress.getTime() > STALL_MS) {
+      next = {
+        ...next,
+        status: 'FAILED',
+        finishedAt: new Date(),
+        resumeAt: null,
+        error: next.error ?? run.error ?? 'The import did not move on for a day',
+      };
+    }
     const moved =
       Object.keys(next).length > 0
         ? await prisma.githubImportRun.updateMany({
@@ -177,7 +206,7 @@ export async function runImportTick(runId: string): Promise<void> {
 
   try {
     const auth = installation(link);
-    // Asked for until the first page is behind the run: a paused first tick asks again
+    // Asked for until the first page is behind the run; never a reason to stop
     if (state.total === null && state.pass === FIRST_PASS && state.nextPage === 1) {
       state.total = await countOpenIssues(link, auth);
     }
@@ -185,30 +214,47 @@ export async function runImportTick(runId: string): Promise<void> {
       await release();
       return;
     }
-    const posted = await postOwedLinkComments(link.id, extend);
-    if (posted === 'lost') {
+    const comments = await postOwedLinkComments(link.id, extend);
+    posted = comments.posted;
+    if (comments.outcome === 'lost') {
       await release();
+      return;
+    }
+    const fine = { error: null, errorTicks: 0 };
+    if (comments.outcome === 'waiting') {
+      // The link's hourly ceiling of link comments is reached: not a fault, a wait
+      await release({ ...fine, status: 'PAUSED', resumeAt: comments.resumeAt });
       return;
     }
     if (state.pass === PAGES_READ) {
       const owed = await pendingLinkCommentIds(link.id, 1);
-      // Link comments GitHub refused this tick for another reason than its limit are left to
-      // the reconcile, which tries them every round: the run does not wait on them
-      if (owed.length === 0 || posted === 'all-failed') {
-        await release({ status: 'DONE', finishedAt: new Date(), error: null });
+      // Every owed link comment was tried and GitHub refused them for another reason than its
+      // limit: they are left to the reconcile, which tries them every round
+      if (owed.length === 0 || comments.outcome === 'all-failed') {
+        await release({ ...fine, status: 'DONE', finishedAt: new Date() });
         return;
       }
     }
-    await release({ error: null });
+    await release(fine);
   } catch (err) {
     if (isRateLimited(err)) {
-      await release({ status: 'PAUSED', resumeAt: new Date(Date.now() + retryAfterMs(err)) });
+      // A wait GitHub asked for, not a fault: the error of an earlier tick is cleared
+      await release({
+        status: 'PAUSED',
+        resumeAt: new Date(Date.now() + retryAfterMs(err)),
+        error: null,
+      });
       return;
     }
     const message = err instanceof AppError ? err.message : 'The import failed';
-    if (isPermanent(err)) {
-      logger.warn('github import run failed', { runId, code: (err as AppError).code });
-      await release({ status: 'FAILED', finishedAt: new Date(), error: message });
+    const errorTicks = run.errorTicks + 1;
+    if (isPermanent(err) || errorTicks >= MAX_ERROR_TICKS) {
+      logger.warn('github import run failed', {
+        runId,
+        error: err instanceof AppError ? err.code : 'unknown',
+        errorTicks,
+      });
+      await release({ status: 'FAILED', finishedAt: new Date(), error: message, errorTicks });
       return;
     }
     // GitHub away, a timeout, the App's credentials: tried again in a minute
@@ -220,16 +266,17 @@ export async function runImportTick(runId: string): Promise<void> {
       status: 'PAUSED',
       resumeAt: new Date(Date.now() + RETRY_AFTER_FAILURE_MS),
       error: message,
+      errorTicks,
     });
   }
 }
 
 /**
  * GitHub's count of the repository's open issues (pull requests left out), for the progress.
- * Search addresses the repository by name; a count that cannot be had is null.
+ * Search addresses the repository by name; a count that cannot be had, its rate limit included,
+ * is null and never stops the run.
  * @param link The link
  * @param auth The installation
- * @throws {AppError} GITHUB_RATE_LIMITED, which pauses the run
  */
 async function countOpenIssues(link: GithubRepoLink, auth: GithubAuth): Promise<number | null> {
   try {
@@ -238,8 +285,8 @@ async function countOpenIssues(link: GithubRepoLink, auth: GithubAuth): Promise<
     });
     const total = Number(data?.total_count);
     return Number.isInteger(total) && total >= 0 ? total : null;
-  } catch (err) {
-    if (isRateLimited(err)) throw err;
+  } catch {
+    // Search has limits of its own: the count is asked again on the next tick
     return null;
   }
 }
@@ -388,31 +435,54 @@ const importedNow = async (repoLinkId: string, githubIssueNumber: number) =>
     select: { id: true },
   })) !== null;
 
+type LinkCommentRound =
+  | { outcome: 'lost' | 'ok' | 'all-failed'; posted: number }
+  | { outcome: 'waiting'; posted: number; resumeAt: Date };
+
 /**
- * Posts the link comments the link owes (the backfill's and any a live import left), within
- * {@link IMPORT_PACE}.linkCommentsPerMinute. A claim made in the last minute, by this run or by a
- * live import, counts against it.
+ * Posts the link comments the link owes (the backfill's and any a live import left), within each
+ * window of LINK_COMMENT_WINDOWS: 20 a minute, which only the backfill keeps, and 400 an hour,
+ * which every link comment of the link counts against. A claim made in a window, by this run or
+ * by a live import, counts in it. A full minute leaves the rest for a later tick; a full hour
+ * makes the run wait until it frees a place.
  * @param repoLinkId The link
  * @param extend Pushes the lease out; false when the run was lost or cancelled
- * @returns `lost` when the run was lost or cancelled meanwhile, `all-failed` when every post
- *   tried failed
+ * @returns `lost` when the run was lost or cancelled meanwhile, `all-failed` when GitHub refused
+ *   every owed one, `waiting` with when to go on, else `ok`; with how many went out
  * @throws {AppError} GITHUB_RATE_LIMITED, which pauses the run; the comment GitHub refused is
  *   posted on resume, after a look for one that may have been made
  */
 async function postOwedLinkComments(
   repoLinkId: string,
   extend: () => Promise<boolean>,
-): Promise<'lost' | 'all-failed' | 'ok'> {
-  const recent = await prisma.githubIssueImport.count({
-    where: { repoLinkId, linkCommentClaimedAt: { gte: new Date(Date.now() - MINUTE_MS) } },
+): Promise<LinkCommentRound> {
+  let room = Infinity;
+  let fullWindow: number | null = null;
+  for (const window of LINK_COMMENT_WINDOWS) {
+    const used = await linkCommentsSince(repoLinkId, new Date(Date.now() - window.ms));
+    const left = window.limit - used;
+    if (left <= 0 && window.ms > TICK_SCALE_MS) fullWindow = Math.max(fullWindow ?? 0, window.ms);
+    room = Math.min(room, Math.max(0, left));
+  }
+  const owed = await pendingLinkCommentIds(repoLinkId, room === Infinity ? 1 : room + 1);
+  let posted = 0;
+  const wait = async (ms: number): Promise<LinkCommentRound> => ({
+    outcome: 'waiting',
+    posted,
+    resumeAt: await linkCommentWindowOpensAt(repoLinkId, ms),
   });
-  const ids = await pendingLinkCommentIds(repoLinkId, IMPORT_PACE.linkCommentsPerMinute - recent);
+  if (owed.length === 0) return { outcome: 'ok', posted };
+  if (fullWindow !== null) return wait(fullWindow);
+  const ids = owed.slice(0, room);
   let failed = 0;
   for (const id of ids) {
-    if (!(await extend())) return 'lost';
+    if (!(await extend())) return { outcome: 'lost', posted };
     try {
       // A system write, as the App: never counted against a run's budget
-      await outsideGithubCallCount(() => postLinkComment(id));
+      const outcome = await outsideGithubCallCount(() => postLinkComment(id));
+      if (outcome === 'posted') posted++;
+      // Live imports filled the hour meanwhile
+      if (outcome === 'held') return wait(longestSharedWindow());
     } catch (err) {
       if (isRateLimited(err)) throw err;
       failed++;
@@ -422,8 +492,13 @@ async function postOwedLinkComments(
       });
     }
   }
-  return ids.length > 0 && failed === ids.length ? 'all-failed' : 'ok';
+  // Only a round that tried every owed one says they all failed
+  const everyOne = owed.length <= ids.length;
+  return { outcome: everyOne && failed === ids.length ? 'all-failed' : 'ok', posted };
 }
+
+const longestSharedWindow = () =>
+  Math.max(...LINK_COMMENT_WINDOWS.filter((w) => w.shared).map((w) => w.ms));
 
 /**
  * Ticks the runs that are due: queued, running without a live lease (its worker died), or paused
@@ -463,58 +538,61 @@ const viewOf = (run: GithubImportRun): ImportRunView => ({
   startedAt: run.startedAt,
   finishedAt: run.finishedAt,
   error: run.error,
+  resumeAt: run.resumeAt,
 });
 
 /**
  * Switches the import of a linked project's GitHub Issues on or off. On queues a backfill unless
- * one is under way; off cancels it. Issues imported so far stay either way.
+ * one is under way, or import was on already and its last backfill is done; off cancels it.
+ * Issues imported so far stay either way.
  * @param userId Who switches it
  * @param projectId The project
  * @param enabled On or off
+ * @returns The state, the latest run, and whether a new run was queued
  * @throws {AppError} 404 when the project is not linked to a GitHub repository
  */
 export async function configureImport(
   userId: string,
   projectId: string,
   enabled: boolean,
-): Promise<{ enabled: boolean; run: ImportRunView | null }> {
-  const { linkId, run } = await prisma.$transaction(async (tx) => {
+): Promise<{ enabled: boolean; queued: boolean; run: ImportRunView | null }> {
+  const { linkId, run, queued } = await prisma.$transaction(async (tx) => {
     // The link row is the lock: two calls at once queue one run (imports writing rows that
     // reference the link are not held up by it)
-    const [locked] = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM github_repo_links WHERE "projectId" = ${projectId} FOR NO KEY UPDATE`;
+    const [locked] = await tx.$queryRaw<{ id: string; importIssues: boolean }[]>`
+      SELECT id, "importIssues" FROM github_repo_links WHERE "projectId" = ${projectId}
+      FOR NO KEY UPDATE`;
     if (!locked) {
       throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
     }
     await tx.githubRepoLink.update({ where: { id: locked.id }, data: { importIssues: enabled } });
-    const active = await tx.githubImportRun.findFirst({
-      where: { repoLinkId: locked.id, status: { in: [...ACTIVE_IMPORT_RUN] } },
-      orderBy: { createdAt: 'desc' },
-    });
+    const latest = () =>
+      tx.githubImportRun.findFirst({
+        where: { repoLinkId: locked.id },
+        orderBy: { createdAt: 'desc' },
+      });
     if (enabled) {
-      return {
-        linkId: locked.id,
-        run:
-          active ??
-          (await tx.githubImportRun.create({
-            data: { repoLinkId: locked.id, requestedById: userId },
-          })),
-      };
+      const last = await latest();
+      const active = last && (ACTIVE_IMPORT_RUN as readonly string[]).includes(last.status);
+      // On already, and the backfill went through: new issues come in live, nothing to redo
+      if (active || (locked.importIssues && last?.status === 'DONE')) {
+        return { linkId: locked.id, run: last, queued: false };
+      }
+      const created = await tx.githubImportRun.create({
+        data: { repoLinkId: locked.id, requestedById: userId },
+      });
+      return { linkId: locked.id, run: created, queued: true };
     }
     await tx.githubImportRun.updateMany({
       where: { repoLinkId: locked.id, status: { in: [...ACTIVE_IMPORT_RUN] } },
       // The lease stays: a tick under way still writes its counts when it lets go
       data: { status: 'CANCELLED', finishedAt: new Date() },
     });
-    const last = await tx.githubImportRun.findFirst({
-      where: { repoLinkId: locked.id },
-      orderBy: { createdAt: 'desc' },
-    });
-    return { linkId: locked.id, run: last };
+    return { linkId: locked.id, run: await latest(), queued: false };
   });
   if (run) broadcastProgress(projectId, run.id);
-  logger.info('github import configured', { repoLinkId: linkId, enabled });
-  return { enabled, run: run ? viewOf(run) : null };
+  logger.info('github import configured', { repoLinkId: linkId, enabled, queued });
+  return { enabled, queued, run: run ? viewOf(run) : null };
 }
 
 /**

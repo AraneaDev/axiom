@@ -7,6 +7,8 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 
+const HOUR_MS = 3_600_000;
+
 /**
  * New issues and new comments live events may import per link and clock hour. Updates of what is
  * imported already are not counted. The backfill (Task 3) does not share this cap: it imports
@@ -16,7 +18,28 @@ import { prisma } from '../../config/database';
 export const LIVE_IMPORT_CAP = { issues: 100, comments: 300 } as const;
 export type ImportCapKind = keyof typeof LIVE_IMPORT_CAP;
 
-const HOUR_MS = 3_600_000;
+/**
+ * How fast a backfill goes: new issues imported per tick of the worker (one every 15 s), and link
+ * comments per minute and per hour and link. The hourly ceiling holds for every link comment of
+ * the link (backfill, live imports and the reconcile share it), as GitHub's limit on content
+ * creation does; the minute is the backfill's own pace. The live imports' hourly cap on what they
+ * import is LIVE_IMPORT_CAP.
+ */
+export const IMPORT_PACE = {
+  issuesPerTick: 25,
+  linkCommentsPerMinute: 20,
+  linkCommentsPerHour: 400,
+} as const;
+
+/**
+ * The windows link comments are counted in, each with the most a link may post in it. A `shared`
+ * window holds for every path that posts one; the others only pace the backfill.
+ */
+export const LINK_COMMENT_WINDOWS = [
+  { ms: 60_000, limit: IMPORT_PACE.linkCommentsPerMinute, shared: false },
+  { ms: HOUR_MS, limit: IMPORT_PACE.linkCommentsPerHour, shared: true },
+] as const;
+
 /** Rows older than this are deleted when a link opens a new hour */
 const KEEP_MS = 24 * HOUR_MS;
 

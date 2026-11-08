@@ -712,10 +712,15 @@ async function runReconcile(
 
     // Imported issues still owed their link comment (a run died after its claim, and no event
     // came since). System writes, outside the budget: they never use up what the lists need.
-    // While a backfill is under way it posts them, at its own pace.
+    // While a backfill is under way it posts them, at its own pace; one held up by an error
+    // is not waited on.
     try {
       const backfilling = await prisma.githubImportRun.count({
-        where: { repoLinkId, status: { in: [...ACTIVE_IMPORT_RUN] } },
+        where: {
+          repoLinkId,
+          status: { in: [...ACTIVE_IMPORT_RUN] },
+          OR: [{ status: { not: 'PAUSED' } }, { error: null }],
+        },
       });
       if (backfilling === 0)
         await outsideGithubCallCount(() => postPendingLinkComments(repoLinkId));

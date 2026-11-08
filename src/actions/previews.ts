@@ -1816,13 +1816,23 @@ export async function githubRepoUnlink(projectId: string): Promise<string> {
 export async function githubImportConfigure(projectId: string, enabled: boolean): Promise<string> {
   const link = await prisma.githubRepoLink.findUnique({
     where: { projectId },
-    select: { id: true, fullName: true },
+    select: { id: true, fullName: true, importIssues: true },
   });
   if (!link)
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
   const project = await projectLabel(projectId);
   if (!enabled) {
     return `Stop importing the GitHub Issues of ${link.fullName} into ${project} and cancel a backfill under way; imported issues stay`;
+  }
+  // As configureImport decides: a run under way, or one that is done while import stays on
+  const last = await prisma.githubImportRun.findFirst({
+    where: { repoLinkId: link.id },
+    orderBy: { createdAt: 'desc' },
+    select: { status: true },
+  });
+  const underWay = last && ['QUEUED', 'RUNNING', 'PAUSED'].includes(last.status);
+  if (underWay || (link.importIssues && last?.status === 'DONE')) {
+    return `GitHub Issues of ${link.fullName} are imported into ${project} already: nothing is imported or posted`;
   }
   const counted = await prisma.githubImportRun.findFirst({
     where: { repoLinkId: link.id, total: { not: null } },

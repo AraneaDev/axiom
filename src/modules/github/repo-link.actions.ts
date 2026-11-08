@@ -165,7 +165,7 @@ registerActions([
         .boolean()
         .describe('On imports every open GitHub Issue now and new ones as they come'),
     }),
-    output: z.looseObject({ enabled: z.boolean(), run: importRun }),
+    output: z.looseObject({ enabled: z.boolean(), queued: z.boolean(), run: importRun }),
     preview: (_ctx, { projectId, enabled }) => previews.githubImportConfigure(projectId, enabled),
     rest: { method: 'PUT', path: `${PATH}/import` },
     authorize: manage,
