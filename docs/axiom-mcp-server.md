@@ -278,6 +278,50 @@ A GitHub rule is limited so it can't flood a ticket:
 
 A project gets two to four default rules when it links a repository: a pull request opening moves the ticket to In review (only when the board has a column named In review), a merge moves it to done (only when the board has a done column; both skip a ticket that is done already), a comment when a pull request merges, and a comment when checks fail. They are created once per link. A rule the team deletes stays deleted for that link; linking the repository again creates the missing ones again. Read them with `automationRule.list` and change or delete them like any other rule.
 
+#### GitHub import and release notes
+
+`githubImport.configure` switches the import of the linked repository's GitHub Issues on or off for a project, and `githubImport.status` shows whether it is on and how the backfill stands. `githubRelease.writeNotes` writes the release notes of a tag. `githubRepo.update` sets the wiki space the notes go to by default.
+
+```json
+{ "action": "githubImport.configure", "input": { "projectId": "<project id>", "enabled": true } }
+{ "action": "githubImport.status", "input": { "projectId": "<project id>" } }
+{ "action": "githubRelease.writeNotes", "input": { "projectId": "<project id>", "tag": "v1.2.0" } }
+```
+
+Import is opt in per linked repository. Switching it on imports every open issue of the repository and posts one comment on each of them on GitHub, as the App, that links back to the Axiom issue. A token's call that switches it on waits for approval; switching it off runs at once. `githubImport.status` answers `{ enabled, run, liveCap }`. `run` is the latest backfill (`status`, `total`, `done`, `failed`; `total` is null until GitHub has counted) and `liveCap` says whether live import is paused for the hour and when it resumes.
+
+Release notes are written on request only, as your own GitHub account. They need the same GitHub connection as the other [GitHub actions](#github-actions), and the repository must have the tag. A token needs `github:write` and `wiki:write`. `token-reach.json` records the lowest scope only (`github:write`); the second scope is checked in `authorize`, the same way as `attachment.upload`. A token without `wiki:write` answers `403 SCOPE`.
+
+The notes list the pull requests merged between the previous published release and the tag, and the tickets they name, under the headings `Pull requests` and `Tickets`. They go to a wiki page and to the body of the GitHub Release. Pass `previousTag` to compare with another tag. The space is the one you pass as `spaceId`, otherwise the project's release notes space; it must belong to the project's team. The answer is `{ pageUrl, releaseUrl, pullRequests, tickets, truncated, draft }`. When GitHub lists only part of the changes, `truncated` is true and the notes end by saying so. A draft Release stays a draft: its body is written and it is never published.
+
+Axiom starts every body it writes with a marker that carries a hash of the text below it. A Release body or page that does not start with the marker, or a Release body that a person edited since (the hash no longer matches), is never overwritten. The call answers `409` instead. Pass `replaceBody: true` to replace it. That is destructive, so a token's call waits for approval.
+
+| Code | Status | Meaning |
+|---|---|---|
+| `GITHUB_TAG_NOT_FOUND` | 404 | GitHub has no such tag, or your connection can't see it |
+| `RELEASE_NO_CHANGES` | 400 | There are no commits from the previous tag to this one; nothing was written |
+| `RELEASE_PREVIOUS_TAG_REQUIRED` | 400 | No earlier release exists to compare with; pass `previousTag` |
+| `RELEASE_NOTES_SPACE_REQUIRED` | 400 | No `spaceId` and the project has no release notes space |
+| `RELEASE_NOTES_SPACE_INVALID` | 400 | The space does not belong to the project's team |
+| `GITHUB_RELEASE_BODY_EXISTS` | 409 | The Release has a body Axiom did not write, or one that was edited since |
+| `RELEASE_PAGE_EXISTS` | 409 | The wiki page exists and Axiom did not write it |
+| `GITHUB_FORBIDDEN` | 403 | Your GitHub account can't write releases in this repository |
+| `GITHUB_NOT_LINKED` | 409 | The project has no linked repository |
+
+What an import does:
+
+- Only open issues are imported. Closed issues and pull requests never are.
+- Each issue gets a link comment from the App, `Tracked in Axiom as <KEY>`. It is claimed first and checked again after a crash, so an issue never gets two.
+- Authors that map to no member of the project's org show as `GitHub (<login>)`, and the issue or comment belongs to the built-in GitHub user.
+- Imported text never notifies anyone: no mentions, no assignee or watcher mail. Titles, bodies and comments are stored as GitHub wrote them and are untrusted text.
+- Axiom wins a conflict. When you changed the title, body or labels of an imported issue, or a comment, GitHub's newer value is not applied. An `import_conflict` activity names the field instead.
+- An issue or comment you deleted in Axiom stays deleted. A later GitHub event does not bring it back.
+- The backfill reads the open issues in pages, 25 new issues every 15 seconds, and runs no automation rules. A rule runs only for an issue GitHub opened after the repository was linked.
+- Live import takes at most 100 new issues and 300 new comments per linked repository per clock hour. After that it pauses until the next hour, `liveCap` shows when, and nothing is lost: the reconcile picks up what was turned away.
+- The reconcile (every 15 minutes) catches up on issues and comments that changed since its last successful read, up to 72 hours back, oldest first, and runs a comment pass over imported issues whose comments were cut short.
+- Link comments are limited to 20 a minute per backfill and 400 an hour per installation, counted over every path that posts one (backfill, live import and reconcile). Past the hourly ceiling the issues still come in and the comments follow as the budget frees.
+- When GitHub or the network fails, the backfill backs off (1, 2, 4 minutes, up to 30). After 10 ticks in a row that failed, or a day without progress, it is `FAILED` with the error as text. Switching import on again starts a new run.
+
 ### upload
 
 Two ways, both ending with a file that is staged or attached:
@@ -437,7 +481,7 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | `act`          | The scope of the action's area and kind, for example `issues:write` for `issue.update`, `wiki:write` for `page.create`. `describe` shows the area and kind of each action |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
-The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals`, `github` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). The `github` area has `github:read` and `github:write`. `githubAccount.get`, `githubApp.status`, `githubRepo.get` and `githubRepo.health` take `github:read`, and `githubRepo.link`, `githubRepo.reconcile`, `githubRepo.unlink` and the nine [GitHub actions](#github-actions) take `github:write`. The `development` and `checks` includes also need `github:read`. Linking a repository changes who can read its pull requests and CI logs, so a token's `githubRepo.link` waits for approval, and so does `githubRepo.unlink`, unless your org relaxed destructive approvals. Setting up the App, connecting or disconnecting an account and the webhook are web UI only (`uiOnly`), so no token reaches them. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals`, `github` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). The `github` area has `github:read` and `github:write`. `githubAccount.get`, `githubApp.status`, `githubRepo.get` and `githubRepo.health` take `github:read`, and `githubRepo.link`, `githubRepo.reconcile`, `githubRepo.update`, `githubRepo.unlink`, `githubImport.configure`, `githubRelease.writeNotes` and the nine [GitHub actions](#github-actions) take `github:write`; `githubImport.status` takes either scope. `githubRelease.writeNotes` also needs `wiki:write` (see [GitHub import and release notes](#github-import-and-release-notes)). The `development` and `checks` includes also need `github:read`. Linking a repository changes who can read its pull requests and CI logs, so a token's `githubRepo.link` waits for approval, and so does `githubRepo.unlink`, unless your org relaxed destructive approvals. Setting up the App, connecting or disconnecting an account and the webhook are web UI only (`uiOnly`), so no token reaches them. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
 
 ## Limits
 
