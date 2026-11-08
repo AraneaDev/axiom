@@ -34,8 +34,16 @@ const LEASE_MS = 2 * 60_000;
 const PER_PAGE = 100;
 /** The most pages one tick reads; pages of issues imported before cost one call each */
 const PAGES_PER_TICK = 5;
-/** How long a run waits after GitHub failed in a way that may pass */
+/** How long a run waits after its first failure that may pass; it doubles with each one after */
 const RETRY_AFTER_FAILURE_MS = 60_000;
+/** The longest wait after a failure: 10 failing ticks in a row then take hours, not minutes */
+const MAX_RETRY_AFTER_FAILURE_MS = 30 * 60_000;
+/**
+ * The wait after the n-th failing tick in a row: 1, 2, 4, 8, 16, then 30 minutes.
+ * @param errorTicks The failing ticks in a row, this one included
+ */
+const backoffMs = (errorTicks: number) =>
+  Math.min(RETRY_AFTER_FAILURE_MS * 2 ** (errorTicks - 1), MAX_RETRY_AFTER_FAILURE_MS);
 /** When GitHub's rate limit names no time */
 const DEFAULT_RETRY_SECONDS = 60;
 /** A window no longer than this only paces the ticks; a longer full one makes the run wait */
@@ -228,7 +236,7 @@ export async function runImportTick(runId: string): Promise<void> {
       await release();
       return;
     }
-    const comments = await postOwedLinkComments(link.id, extend);
+    const comments = await postOwedLinkComments(link, extend);
     posted = comments.posted;
     if (comments.outcome === 'lost') {
       await release();
@@ -275,14 +283,14 @@ export async function runImportTick(runId: string): Promise<void> {
       await release({ status: 'FAILED', finishedAt: new Date(), error: message, errorTicks });
       return;
     }
-    // GitHub away, a timeout, the App's credentials: tried again in a minute
+    // GitHub away, a timeout, the App's credentials: tried again later, waiting longer each time
     logger.warn('github import tick failed', {
       runId,
       error: err instanceof AppError ? err.code : 'unknown',
     });
     await release({
       status: 'PAUSED',
-      resumeAt: new Date(Date.now() + RETRY_AFTER_FAILURE_MS),
+      resumeAt: new Date(Date.now() + backoffMs(errorTicks)),
       error: message,
       errorTicks,
     });
@@ -463,10 +471,11 @@ type LinkCommentRound = {
 /**
  * Posts the link comments the link owes (the backfill's and any a live import left), within each
  * window of LINK_COMMENT_WINDOWS: 20 a minute, which only the backfill keeps, and 400 an hour,
- * which every link comment of the link counts against. A claim made in a window, by this run or
+ * which every link comment of the installation counts against. A claim made in a window, by this run or
  * by a live import, counts in it. A full minute leaves the rest for a later tick; a full hour
- * holds them until it frees a place, and says when that is.
- * @param repoLinkId The link
+ * holds them until it frees a place, and says when that is. The hour counts every link of the
+ * installation.
+ * @param link The link and its installation
  * @param extend Pushes the lease out; false when the run was lost or cancelled
  * @returns `lost` when the run was lost or cancelled meanwhile, else `ok`; how many went out, and
  *   until when the rest wait
@@ -474,13 +483,17 @@ type LinkCommentRound = {
  *   posted on resume, after a look for one that may have been made
  */
 async function postOwedLinkComments(
-  repoLinkId: string,
+  link: Pick<GithubRepoLink, 'id' | 'installationId'>,
   extend: () => Promise<boolean>,
 ): Promise<LinkCommentRound> {
+  const repoLinkId = link.id;
+  // The shared windows count the whole installation, as GitHub's limit does; the rest the link
+  const scopeOf = (window: (typeof LINK_COMMENT_WINDOWS)[number]) =>
+    window.shared ? { installationId: link.installationId } : { repoLinkId };
   let room = Infinity;
   let fullWindow: number | null = null;
   for (const window of LINK_COMMENT_WINDOWS) {
-    const used = await linkCommentsSince(repoLinkId, new Date(Date.now() - window.ms));
+    const used = await linkCommentsSince(scopeOf(window), new Date(Date.now() - window.ms));
     const left = window.limit - used;
     if (left <= 0 && window.ms > TICK_SCALE_MS) fullWindow = Math.max(fullWindow ?? 0, window.ms);
     room = Math.min(room, Math.max(0, left));
@@ -490,7 +503,7 @@ async function postOwedLinkComments(
   const held = async (ms: number): Promise<LinkCommentRound> => ({
     outcome: 'ok',
     posted,
-    waitUntil: await linkCommentWindowOpensAt(repoLinkId, ms),
+    waitUntil: await linkCommentWindowOpensAt({ installationId: link.installationId }, ms),
   });
   if (fullWindow !== null) {
     return (await pendingLinkCommentIds(repoLinkId, 1)).length > 0
@@ -516,7 +529,7 @@ async function postOwedLinkComments(
   // This round may have filled the hour with more still owed: say until when they wait
   for (const window of LINK_COMMENT_WINDOWS) {
     if (window.ms <= TICK_SCALE_MS) continue;
-    const used = await linkCommentsSince(repoLinkId, new Date(Date.now() - window.ms));
+    const used = await linkCommentsSince(scopeOf(window), new Date(Date.now() - window.ms));
     if (used >= window.limit && (await pendingLinkCommentIds(repoLinkId, 1)).length > 0) {
       return held(window.ms);
     }

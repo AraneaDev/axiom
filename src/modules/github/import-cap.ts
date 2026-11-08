@@ -20,9 +20,10 @@ export type ImportCapKind = keyof typeof LIVE_IMPORT_CAP;
 
 /**
  * How fast a backfill goes: new issues imported per tick of the worker (one every 15 s), and link
- * comments per minute and per hour and link. The hourly ceiling holds for every link comment of
- * the link (backfill, live imports and the reconcile share it), as GitHub's limit on content
- * creation does; the minute is the backfill's own pace. The live imports' hourly cap on what they
+ * comments per minute and link and per hour and installation. The hourly ceiling holds for every
+ * link comment of the App's installation, over all its links (backfill, live imports and the
+ * reconcile share it), as GitHub's limit on content creation does; the minute is the backfill's
+ * own pace per link. The live imports' hourly cap on what they
  * import is LIVE_IMPORT_CAP.
  */
 export const IMPORT_PACE = {

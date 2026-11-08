@@ -972,3 +972,146 @@ describe('the lease and the switch', { timeout: 120_000 }, () => {
     );
   });
 });
+
+describe('fix round 3', { timeout: 120_000 }, () => {
+  it('counts the hourly ceiling over every link of the installation', async () => {
+    lists = repository(3);
+    fake.setRepoLists(FULL_NAME, lists);
+    const other = await prisma.project.create({
+      data: { name: 'Gadget', slug: 'gadget-gimr', prefix: 'GGR', teamId: ctx.teamId },
+    });
+    try {
+      const sibling = await prisma.githubRepoLink.create({
+        data: {
+          projectId: other.id,
+          repoId: BigInt(REPO_ID + 1),
+          installationId: BigInt(INSTALLATION_ID),
+          owner: 'acme-labs',
+          name: 'gadget',
+          fullName: 'acme-labs/gadget',
+          defaultBranch: 'main',
+          htmlUrl: 'https://github.com/acme-labs/gadget',
+          linkedById: ctx.owner.id,
+        },
+      });
+      // The other repository of the same installation posted 400 in the last hour
+      const oldest = new Date(Date.now() - 50 * 60_000);
+      await prisma.githubIssueImport.createMany({
+        data: Array.from({ length: IMPORT_PACE.linkCommentsPerHour }, (_, i) => ({
+          repoLinkId: sibling.id,
+          githubIssueNumber: 10_000 + i,
+          githubIssueId: String(9_100_000 + i),
+          mirroredTitle: 't',
+          mirroredBodyHash: 'h',
+          mirroredLabels: [],
+          linkCommentId: String(81_000 + i),
+          linkCommentClaimedAt: new Date(oldest.getTime() + i * 1000),
+          githubUpdatedAt: new Date(),
+          lastImportedAt: new Date(),
+        })),
+      });
+      await enable();
+      const run = await latestRun();
+      await runImportTick(run.id);
+      expect(commentPosts()).toEqual([]);
+      expect(await latestRun()).toMatchObject({
+        status: 'RUNNING',
+        done: 3,
+        linkCommentsWaitUntil: new Date(oldest.getTime() + HOUR_MS),
+      });
+    } finally {
+      await prisma.project.delete({ where: { id: other.id } });
+    }
+  });
+
+  it('backs off after errors: 1, 2, 4, 8, 16, then 30 minutes', async () => {
+    fake.on('GET /repos/:owner/:repo/issues', { status: 502 });
+    await enable();
+    const run = await latestRun();
+    const waits: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const at = Date.now();
+      await runImportTick(run.id);
+      const paused = await latestRun();
+      expect(paused.status).toBe('PAUSED');
+      waits.push(Math.round((paused.resumeAt!.getTime() - at) / 60_000));
+      await prisma.githubImportRun.update({
+        where: { id: run.id },
+        data: { resumeAt: new Date(Date.now() - 1000) },
+      });
+    }
+    expect(waits).toEqual([1, 2, 4, 8, 16, 30, 30, 30]);
+  });
+
+  it('answers a retryable error, not a crash, when the link comment lock stays taken', async () => {
+    lists = repository(1);
+    fake.setRepoLists(FULL_NAME, lists);
+    await importGithubIssue({ ...link, importIssues: true }, lists.issues[0] as never, {
+      withComments: false,
+      linkComment: false,
+    });
+    const row = await prisma.githubIssueImport.findFirstOrThrow({ where: { repoLinkId: link.id } });
+    let release!: () => void;
+    const holding = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const taken = new Promise<void>((resolve) => (locked = resolve));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-link-comments:installation:${INSTALLATION_ID}`}, 0))`;
+        locked();
+        await holding;
+      },
+      { maxWait: 5_000, timeout: 30_000 },
+    );
+    await taken;
+    try {
+      await expect(postLinkComment(row.id)).rejects.toMatchObject({
+        statusCode: 503,
+        code: 'GITHUB_LINK_COMMENT_BUSY',
+      });
+    } finally {
+      release();
+      await holder;
+    }
+    expect(commentPosts()).toEqual([]);
+    expect(await postLinkComment(row.id)).toBe('posted');
+  });
+
+  it('looks for the link comment on up to three pages since the claim', async () => {
+    lists = repository(1);
+    fake.setRepoLists(FULL_NAME, lists);
+    await importGithubIssue({ ...link, importIssues: true }, lists.issues[0] as never, {
+      withComments: false,
+      linkComment: false,
+    });
+    const row = await prisma.githubIssueImport.findFirstOrThrow({ where: { repoLinkId: link.id } });
+    const claim = new Date(Date.now() - 20 * 60_000);
+    const at = (i: number) => new Date(claim.getTime() + 60_000 + i * 1000).toISOString();
+    const people = Array.from({ length: 250 }, (_, i) => ({
+      id: 70_000 + i,
+      body: `Me too ${i}`,
+      user: { login: 'voorbeeld-dev', id: 7001, type: 'User' },
+      created_at: at(i),
+      updated_at: at(i),
+    }));
+    // The comment a failed post made, behind 220 others
+    people.splice(220, 0, {
+      id: 6100,
+      body: `${LINK_PREFIX}X-1](https://axiom.invalid/x)`,
+      user: { login: 'acme-axiom[bot]', id: 9_900_001, type: 'Bot' },
+      created_at: at(220),
+      updated_at: at(220),
+      performed_via_github_app: { id: APP_ID },
+    } as never);
+    lists.issueComments['1'] = people;
+    await prisma.githubIssueImport.update({
+      where: { id: row.id },
+      data: { linkCommentClaimedAt: claim },
+    });
+    expect(await postLinkComment(row.id)).toBe('posted');
+    expect(commentPosts()).toEqual([]);
+    expect(
+      await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: row.id } }),
+    ).toMatchObject({ linkCommentId: '6100' });
+  });
+});

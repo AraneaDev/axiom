@@ -64,6 +64,8 @@ const LOCK_HOLD_MS = 60_000;
  * the lock and needs others for its work, so this stays well under the pool (10).
  */
 const MAX_LOCK_HOLDERS = 3;
+/** Pages of comments since the claim read when looking for a link comment a failed post made */
+const LINK_LOOKUP_PAGES = 3;
 /** Pages of comments read when an issue is imported */
 const COMMENT_PAGES = 3;
 /** The start of the link comment, which is how the App's own comment is recognised */
@@ -647,10 +649,11 @@ async function findLinkComment(
     select: { appId: true, slug: true },
   });
   if (!app) return null;
-  const { data } = await githubRequest<GithubComment[]>(auth, 'GET', path, {
-    query: { per_page: 100, since: since.toISOString() },
+  const { items } = await githubPaginate<GithubComment>(auth, path, {
+    query: { since: since.toISOString() },
+    maxPages: LINK_LOOKUP_PAGES,
   });
-  const found = (Array.isArray(data) ? data : []).find(
+  const found = items.find(
     (comment) =>
       typeof comment.body === 'string' &&
       comment.body.startsWith(LINK_COMMENT_PREFIX) &&
@@ -665,58 +668,95 @@ const isPermanent = (err: unknown) =>
   err instanceof AppError && (err.code === 'GITHUB_NOT_FOUND' || err.code === 'GITHUB_GONE');
 
 /**
- * The link comments a link posted (or has a live claim out for) since a time: what the windows of
- * LINK_COMMENT_WINDOWS count. A failed post leaves a stale claim and is not counted.
- * @param repoLinkId The link
+ * Whose link comments a window counts: one link (the backfill's own pace) or every link of one
+ * installation (the shared ceiling, as GitHub's limit on content creation is the installation's).
+ */
+export type LinkCommentScope = { repoLinkId: string } | { installationId: bigint };
+
+const scopeWhere = (scope: LinkCommentScope) =>
+  'repoLinkId' in scope
+    ? { repoLinkId: scope.repoLinkId }
+    : { repoLink: { installationId: scope.installationId } };
+
+// Posted in the window, or a claim still out (a failed post leaves a stale one, not counted)
+const countedSince = (since: Date) => [
+  { linkCommentId: { not: null }, linkCommentClaimedAt: { gte: since } },
+  {
+    linkCommentId: null,
+    linkCommentClaimedAt: {
+      gte: new Date(Math.max(since.getTime(), Date.now() - LINK_CLAIM_TTL_MS)),
+    },
+  },
+];
+
+/**
+ * The link comments posted (or with a live claim out) since a time, by one link or by every link
+ * of an installation: what the windows of LINK_COMMENT_WINDOWS count.
+ * @param scope The link, or the installation
  * @param since From when
- * @param db The client, or the transaction that holds the link's comment lock
+ * @param db The client, or the transaction that holds the installation's comment lock
  */
 export function linkCommentsSince(
-  repoLinkId: string,
+  scope: LinkCommentScope,
   since: Date,
   db: Pick<typeof prisma, 'githubIssueImport'> = prisma,
 ): Promise<number> {
-  const live = new Date(Math.max(since.getTime(), Date.now() - LINK_CLAIM_TTL_MS));
   return db.githubIssueImport.count({
-    where: {
-      repoLinkId,
-      OR: [
-        { linkCommentId: { not: null }, linkCommentClaimedAt: { gte: since } },
-        { linkCommentId: null, linkCommentClaimedAt: { gte: live } },
-      ],
-    },
+    where: { ...scopeWhere(scope), OR: countedSince(since) },
   });
 }
 
 /**
- * When a full window of the link frees a place again: an hour (say) after the oldest link comment
- * it counts.
- * @param repoLinkId The link
+ * When a full window frees a place again: an hour (say) after the oldest link comment it counts.
+ * @param scope The link, or the installation
  * @param windowMs The window
  */
 export async function linkCommentWindowOpensAt(
-  repoLinkId: string,
+  scope: LinkCommentScope,
   windowMs: number,
 ): Promise<Date> {
-  const since = new Date(Date.now() - windowMs);
   const oldest = await prisma.githubIssueImport.findFirst({
-    where: {
-      repoLinkId,
-      OR: [
-        { linkCommentId: { not: null }, linkCommentClaimedAt: { gte: since } },
-        {
-          linkCommentId: null,
-          linkCommentClaimedAt: {
-            gte: new Date(Math.max(since.getTime(), Date.now() - LINK_CLAIM_TTL_MS)),
-          },
-        },
-      ],
-    },
+    where: { ...scopeWhere(scope), OR: countedSince(new Date(Date.now() - windowMs)) },
     orderBy: { linkCommentClaimedAt: 'asc' },
     select: { linkCommentClaimedAt: true },
   });
   const at = oldest?.linkCommentClaimedAt ?? new Date();
   return new Date(at.getTime() + windowMs);
+}
+
+/** How long a link comment waits for the installation's lock before it gives up (and retries) */
+const LINK_COMMENT_LOCK_WAIT_MS = 5_000;
+
+// Postgres' lock_timeout (55P03), or Prisma's transaction running out of its time (P2028)
+const isLockTimeout = (err: unknown) =>
+  !(err instanceof AppError) &&
+  err instanceof Error &&
+  /55P03|lock timeout|P2028|Transaction (API error|already closed)|timed out|maximum allowed/i.test(
+    `${(err as { code?: string }).code ?? ''} ${err.message}`,
+  );
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * Runs the claim of a link comment in a transaction whose waits fit the installation lock's.
+ * @param work The claim
+ * @throws {AppError} 503 GITHUB_LINK_COMMENT_BUSY when the lock or the pool stays taken (the
+ *   caller tries again later; nothing was claimed)
+ */
+async function claimLinkComment<T>(work: (tx: Tx) => Promise<T>): Promise<T> {
+  try {
+    return await prisma.$transaction(work, {
+      maxWait: LINK_COMMENT_LOCK_WAIT_MS,
+      timeout: LINK_COMMENT_LOCK_WAIT_MS * 2,
+    });
+  } catch (err) {
+    if (!isLockTimeout(err)) throw err;
+    throw new AppError(
+      503,
+      'Another link comment of this GitHub installation is being posted',
+      'GITHUB_LINK_COMMENT_BUSY',
+    );
+  }
 }
 
 /** What became of a call to post a link comment */
@@ -728,9 +768,9 @@ export type LinkCommentOutcome = 'posted' | 'held' | 'skipped';
  * runs try. A claim older than 10 minutes without a comment id belongs to a run that died (or
  * failed): the run that takes it over first looks for the comment that run may have made. When
  * GitHub answers 404 or 410, or refuses it 5 times (a 4xx), the row notes it and nothing tries
- * again; a failed one that was no rate limit goes to the back of the queue. It is held (left owed) while the link's hourly
- * ceiling of link comments is reached, or while a backfill of the link waits for GitHub's rate
- * limit, which then posts it.
+ * again; a failed one that was no rate limit goes to the back of the queue. It is held (left
+ * owed) while the installation's hourly ceiling of link comments is reached, or while a backfill
+ * of the link waits for GitHub's rate limit, which then posts it.
  * @param importId The import
  * @returns `posted` (or found already made), `held`, or `skipped` when there is nothing to do
  */
@@ -753,9 +793,12 @@ export async function postLinkComment(importId: string): Promise<LinkCommentOutc
   const previous = row.linkCommentClaimedAt;
   if (previous && previous.getTime() > Date.now() - LINK_CLAIM_TTL_MS) return 'skipped';
   const claimedAt = new Date();
-  const claim = await prisma.$transaction(async (tx) => {
-    // One claim of the link at a time, so its windows are never overrun by two at once
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-link-comments:${row.repoLinkId}`}, 0))`;
+  const installationId = row.repoLink.installationId;
+  const claim = await claimLinkComment(async (tx) => {
+    // One claim of the installation at a time, so its windows are never overrun by two at once.
+    // The wait is bounded: a burst gives up with a retryable error rather than holding the pool.
+    await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '${LINK_COMMENT_LOCK_WAIT_MS}ms'`);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-link-comments:installation:${installationId}`}, 0))`;
     const waiting = await tx.githubImportRun.count({
       where: {
         repoLinkId: row.repoLinkId,
@@ -768,7 +811,7 @@ export async function postLinkComment(importId: string): Promise<LinkCommentOutc
     for (const window of LINK_COMMENT_WINDOWS) {
       if (!window.shared) continue;
       const used = await linkCommentsSince(
-        row.repoLinkId,
+        { installationId },
         new Date(claimedAt.getTime() - window.ms),
         tx,
       );
