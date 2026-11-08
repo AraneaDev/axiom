@@ -80,6 +80,7 @@ function emptyAction(): AutomationAction {
 interface RuleFormData {
   name: string;
   trigger: string;
+  condition: string;
   conditions: AutomationCondition[];
   actions: AutomationAction[];
 }
@@ -97,6 +98,7 @@ function RuleForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [trigger, setTrigger] = useState(initial?.trigger ?? 'issue:created');
+  const [condition, setCondition] = useState(initial?.condition ?? '');
   const [conditions, setConditions] = useState<AutomationCondition[]>(initial?.conditions ?? []);
   const [actions, setActions] = useState<AutomationAction[]>(
     initial?.actions?.length ? initial.actions : [emptyAction()],
@@ -120,7 +122,7 @@ function RuleForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ name, trigger, conditions, actions });
+    onSave({ name, trigger, condition: condition.trim(), conditions, actions });
   };
 
   return (
@@ -160,7 +162,18 @@ function RuleForm({
             <PlusCircle className="h-3.5 w-3.5" /> Add Condition
           </Button>
         </div>
-        {conditions.length === 0 && (
+        <Input
+          label="Query condition"
+          value={condition}
+          onChange={(e) => setCondition(e.target.value)}
+          placeholder="e.g. type = Bug AND priority > Medium"
+          maxLength={2000}
+        />
+        <p className="text-xs text-text-tertiary mt-1 mb-2">
+          Written like a search query, for example done = false. When it is set, it is used instead
+          of the conditions list below.
+        </p>
+        {conditions.length === 0 && !condition.trim() && (
           <p className="text-xs text-text-tertiary">
             No conditions -- rule fires on every trigger event.
           </p>
@@ -309,9 +322,14 @@ export default function AutomationRules() {
     (data: {
       name: string;
       trigger: string;
+      condition: string;
       conditions: AutomationCondition[];
       actions: AutomationAction[];
-    }) => automationApi.createRule(currentProject!.id, data),
+    }) =>
+      automationApi.createRule(currentProject!.id, {
+        ...data,
+        condition: data.condition || undefined,
+      }),
     {
       successMessage: 'Automation rule created',
       invalidateKeys: [['automation-rules', currentProject?.id]],
@@ -420,10 +438,17 @@ export default function AutomationRules() {
             initial={{
               name: editingRule.name,
               trigger: editingRule.trigger,
-              conditions: editingRule.conditions,
+              condition: editingRule.condition ?? '',
+              conditions: editingRule.conditions ?? [],
               actions: editingRule.actions,
             }}
-            onSave={(data) => updateMutation.mutate({ ruleId: editingRule.id, data })}
+            onSave={(data) =>
+              updateMutation.mutate({
+                ruleId: editingRule.id,
+                // An emptied field clears the stored condition
+                data: { ...data, condition: data.condition || null },
+              })
+            }
             onCancel={() => setEditingRule(null)}
             saving={updateMutation.isPending}
           />
@@ -453,8 +478,10 @@ export default function AutomationRules() {
                 </div>
                 <p className="text-xs text-text-secondary">
                   Trigger: {triggerLabel(rule.trigger)}
-                  {(rule.conditions?.length ?? 0) > 0 &&
-                    ` | ${rule.conditions.length} condition(s)`}
+                  {rule.condition
+                    ? ` | Condition: ${rule.condition}`
+                    : (rule.conditions?.length ?? 0) > 0 &&
+                      ` | ${rule.conditions!.length} condition(s)`}
                   {` | ${rule.actions?.length ?? 0} action(s)`}
                 </p>
               </div>

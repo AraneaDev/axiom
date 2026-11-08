@@ -30,7 +30,9 @@ export interface AutomationRule {
   projectId: string;
   name: string;
   trigger: string;
-  conditions: AutomationCondition[];
+  /** A condition in the query language; when set, `conditions` is not read */
+  condition?: string | null;
+  conditions: AutomationCondition[] | null;
   actions: AutomationAction[];
   enabled: boolean;
   createdAt: string;
@@ -52,6 +54,7 @@ export const automationApi = {
     data: {
       name: string;
       trigger: string;
+      condition?: string | null;
       conditions: AutomationCondition[];
       actions: AutomationAction[];
       enabled?: boolean;
