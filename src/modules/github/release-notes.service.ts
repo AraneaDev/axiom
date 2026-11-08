@@ -49,6 +49,8 @@ export type ReleaseNotesResult = {
   tickets: number;
   /** Whether GitHub listed only part of the commits or pull requests */
   truncated: boolean;
+  /** Whether the Release written is a draft, a person's, which Axiom left a draft */
+  draft: boolean;
 };
 
 const releaseReply = z.looseObject({
@@ -341,19 +343,22 @@ async function previousRelease(
 }
 
 /**
- * The commits on the first-parent line from the tag down through the compared commits. Every
- * other compared commit was brought in by a merge commit on that line, and the pull request that
- * merge commit merged is found through the merge commit itself, so its branch commits need no
- * lookup of their own. Null when the line can't be told: a commit without its parents, or a head
- * that is no compared commit.
- * @param commits The compared commits, oldest first as GitHub lists them
+ * The commits on the first-parent line from the tag down through the compared commits. Within
+ * `base...head` every compared commit is an ancestor of the head, so the head is the one compared
+ * commit that no other names as a parent; the order GitHub lists them in decides nothing. Every
+ * other compared commit came in through a merge commit on the line. Null when the line can't be
+ * told: a commit without its parents, or not exactly one head.
+ * @param commits The compared commits
  */
 function mainline(commits: Commit[]): Set<string> | null {
   if (!commits.length || commits.some((c) => !c.parents)) return null;
+  const named = new Set(commits.flatMap((c) => (c.parents ?? []).map((parent) => parent.sha)));
+  const heads = commits.filter((c) => !named.has(c.sha));
+  if (heads.length !== 1) return null;
   const bySha = new Map(commits.map((c) => [c.sha, c]));
   const line = new Set<string>();
   for (
-    let at = commits.at(-1);
+    let at: Commit | undefined = heads[0];
     at && !line.has(at.sha);
     at = bySha.get(at.parents?.[0]?.sha ?? '')
   ) {
@@ -363,23 +368,49 @@ function mainline(commits: Commit[]): Set<string> | null {
 }
 
 /**
+ * The compared commits a merge commit brought in from its other parents, the first-parent line
+ * left out: the branch of a merge that no pull request made (a local `--no-ff` merge, an
+ * integration branch).
+ * @param merge The merge commit
+ * @param bySha The compared commits by sha
+ * @param line The first-parent line
+ */
+function branchOf(merge: Commit, bySha: Map<string, Commit>, line: Set<string>): string[] {
+  const seen = new Set<string>();
+  const queue = (merge.parents ?? []).slice(1).map((parent) => parent.sha);
+  while (queue.length) {
+    const sha = queue.shift() ?? '';
+    const commit = bySha.get(sha);
+    if (!commit || seen.has(sha) || line.has(sha)) continue;
+    seen.add(sha);
+    queue.push(...(commit.parents ?? []).map((parent) => parent.sha));
+  }
+  return [...seen];
+}
+
+/**
  * The pull requests in the commits between two tags: the stored merged ones whose merge commit
  * is among them, then GitHub's answer for each commit none of those matched (at most 100 calls),
  * keeping pull requests merged into the default branch.
  * @param auth The caller's credential
  * @param repo The repository's API path
  * @param link The repository link
- * @param shas The commits
- * @param onMainline The commits on the tag's first-parent line, or null when unknown: only those
- *   are looked up, as a commit off it came in through a merge commit on it
+ * @param commits The compared commits
+ * @param complete Whether the compare was read to its end: only then is the first-parent line
+ *   known, and only its commits are looked up first, as a commit off it came in through a merge
+ *   commit on it. A merge commit on the line that maps to no pull request has its branch looked
+ *   up too.
  */
 async function pullsOfCommits(
   auth: GithubAuth,
   repo: string,
   link: GithubRepoLink,
-  shas: string[],
-  onMainline: Set<string> | null,
+  commits: Commit[],
+  complete: boolean,
 ): Promise<{ pulls: NotePull[]; truncated: boolean }> {
+  const shas = [...new Set(commits.map((c) => c.sha))];
+  const bySha = new Map(commits.map((c) => [c.sha, c]));
+  const onMainline = complete ? mainline(commits) : null;
   const stored = shas.length
     ? await prisma.githubPullRequest.findMany({
         where: { repoLinkId: link.id, state: 'MERGED', mergeCommitSha: { in: shas } },
@@ -407,11 +438,14 @@ async function pullsOfCommits(
   const unmatched = shas.filter(
     (sha) => !matched.has(sha) && (onMainline === null || onMainline.has(sha)),
   );
+  const queued = new Set(unmatched);
 
   const found = new Map<number, NotePull>();
   let calls = 0;
   let truncated = false;
-  for (const sha of unmatched) {
+  // The list grows while it is read: the branch of a merge commit that maps to no pull request
+  for (let next = 0; next < unmatched.length; next++) {
+    const sha = unmatched[next];
     if (calls >= MAX_COMMIT_LOOKUPS) {
       truncated = true;
       logger.info(
@@ -435,17 +469,27 @@ async function pullsOfCommits(
       throw err;
     });
     const list = Array.isArray(reply?.data) ? reply.data : [];
+    let merged = 0;
     for (const item of list) {
       const parsed = pullReply.safeParse(item);
       if (!parsed.success) continue;
       const pr = parsed.data;
       if (!pr.merged_at || pr.base?.ref !== link.defaultBranch) continue;
+      merged++;
       if (pulls.has(pr.number) || found.has(pr.number)) continue;
       found.set(pr.number, {
         number: pr.number,
         title: pr.title,
         login: pr.user?.login ?? 'ghost',
       });
+    }
+    const commit = bySha.get(sha);
+    if (merged === 0 && onMainline?.has(sha) && commit && (commit.parents?.length ?? 0) > 1) {
+      for (const branchSha of branchOf(commit, bySha, onMainline)) {
+        if (matched.has(branchSha) || queued.has(branchSha)) continue;
+        queued.add(branchSha);
+        unmatched.push(branchSha);
+      }
     }
   }
   // A pull request Axiom stored keeps its links, whatever its stored merge commit says
@@ -625,13 +669,7 @@ export async function writeReleaseNotes(
     );
   }
 
-  const found = await pullsOfCommits(
-    auth,
-    repo,
-    link,
-    shas,
-    compared.complete ? mainline(commits) : null,
-  );
+  const found = await pullsOfCommits(auth, repo, link, commits, compared.complete);
   const truncated = !compared.complete || found.truncated;
   const { tickets, keysByPull } = await ticketsOf(link, found.pulls);
   const withKeys = found.pulls.map((pr) => ({
@@ -676,6 +714,7 @@ export async function writeReleaseNotes(
     pullRequests: withKeys.length,
     tickets: tickets.length,
     truncated,
+    draft: release?.draft === true,
   };
 }
 

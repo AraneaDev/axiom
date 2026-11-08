@@ -88,6 +88,7 @@ registerActions([
       pullRequests: z.number(),
       tickets: z.number(),
       truncated: z.boolean(),
+      draft: z.boolean(),
     }),
     preview: (_ctx, { projectId, tag, replaceBody, spaceId }) =>
       previews.githubReleaseNotes(projectId, tag, replaceBody === true, spaceId),

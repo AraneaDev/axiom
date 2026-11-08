@@ -308,6 +308,7 @@ describe('githubRelease.writeNotes', () => {
       pullRequests: 2,
       tickets: 3,
       truncated: false,
+      draft: false,
       releaseUrl: `https://github.com/${WIDGET}/releases/tag/v1.2.0`,
     });
     expect(res.body.pageUrl).toMatch(
@@ -744,6 +745,7 @@ describe('githubRelease.writeNotes', () => {
       `PATCH /repositories/${REPO_ID}/releases/5596`,
     ]);
     expect(Object.keys(writes[0].body as object)).toEqual(['body']);
+    expect(res.body.draft).toBe(true);
     expect(markerOf(releases.get('draft')?.body ?? '').matches).toBe(true);
     // The Releases list was read once, for the draft and the previous tag alike
     expect(
@@ -781,6 +783,64 @@ describe('githubRelease.writeNotes', () => {
     expect(fake.requests.filter((r) => r.path.endsWith('/pulls')).map((r) => r.path)).toEqual([
       `/repositories/${REPO_ID}/commits/${sha(4)}/pulls`,
     ]);
+  });
+
+  it('finds the head by its parents, wherever the compare lists it', async () => {
+    // sha(7) is the tag's commit, a direct push listed before older commits
+    fake.on('GET /repos/:owner/:repo/compare/:basehead', {
+      status: 200,
+      body: {
+        commits: [
+          { sha: sha(2), parents: [{ sha: sha(6) }] },
+          { sha: sha(1), parents: [{ sha: sha(5) }, { sha: sha(2) }] },
+          { sha: sha(7), parents: [{ sha: sha(3) }] },
+          { sha: sha(3), parents: [{ sha: sha(1) }] },
+        ],
+      },
+    });
+    fake.on(`GET /repos/:owner/:repo/commits/${sha(7)}/pulls`, {
+      status: 200,
+      body: [
+        {
+          number: 30,
+          title: 'Ship the tag',
+          merged_at: '2026-10-25T09:00:00Z',
+          user: { login: 'octo-dev' },
+          base: { ref: 'main' },
+        },
+      ],
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body.pullRequests).toBe(3);
+    expect(fake.requests.filter((r) => r.path.endsWith('/pulls')).map((r) => r.path)).toEqual([
+      `/repositories/${REPO_ID}/commits/${sha(7)}/pulls`,
+    ]);
+  });
+
+  it('looks up the branch of a merge commit that no pull request made', async () => {
+    // A local `git merge --no-ff` of #7's branch: GitHub knows no pull request for the merge
+    const merge = 'a'.repeat(40);
+    fake.on('GET /repos/:owner/:repo/compare/:basehead', {
+      status: 200,
+      body: {
+        commits: [
+          { sha: sha(2), parents: [{ sha: sha(6) }] },
+          { sha: merge, parents: [{ sha: sha(5) }, { sha: sha(2) }] },
+          { sha: sha(3), parents: [{ sha: merge }] },
+        ],
+      },
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body.pullRequests).toBe(2);
+    expect(fake.requests.filter((r) => r.path.endsWith('/pulls')).map((r) => r.path)).toEqual([
+      `/repositories/${REPO_ID}/commits/${merge}/pulls`,
+      `/repositories/${REPO_ID}/commits/${sha(2)}/pulls`,
+    ]);
+    expect(releases.get('v1.2.0')?.body).toContain(
+      `- #7 \`Fix the login timeout\` by @octo-dev (${p()}-1, ${p()}-2)`,
+    );
   });
 
   it('refuses a tag that is no valid ref name', async () => {
