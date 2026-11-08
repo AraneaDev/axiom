@@ -89,8 +89,8 @@ registerActions([
       tickets: z.number(),
       truncated: z.boolean(),
     }),
-    preview: (_ctx, { projectId, tag, replaceBody }) =>
-      previews.githubReleaseNotes(projectId, tag, replaceBody === true),
+    preview: (_ctx, { projectId, tag, replaceBody, spaceId }) =>
+      previews.githubReleaseNotes(projectId, tag, replaceBody === true, spaceId),
     rest: { method: 'POST', path: `${PATH}/release-notes` },
     authorize: writeNotesAccess,
     handler: async (ctx, input) => writeReleaseNotes(ctx, input),

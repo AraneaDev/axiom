@@ -62,7 +62,11 @@ const releaseReply = z.looseObject({
 });
 type Release = z.infer<typeof releaseReply>;
 
-const commitReply = z.looseObject({ sha: z.string() });
+const commitReply = z.looseObject({
+  sha: z.string(),
+  parents: z.array(z.looseObject({ sha: z.string() })).optional(),
+});
+type Commit = z.infer<typeof commitReply>;
 const pullReply = z.looseObject({
   number: z.number(),
   title: z.string(),
@@ -303,24 +307,20 @@ async function notesPage(
 
 /**
  * The previous tag: the newest published Release other than this tag that was created before
- * this tag's Release (before now when the tag has none). One page of the list.
- * @param auth The caller's credential
- * @param repo The repository's API path
+ * this tag's Release (before now when the tag has none, or only a draft). One page of the list.
+ * @param listed The first page of the Releases, read once
  * @param tag The release tag
  * @param release This tag's Release, when it has one
  * @throws {AppError} 400 RELEASE_PREVIOUS_TAG_REQUIRED
  */
 async function previousRelease(
-  auth: GithubAuth,
-  repo: string,
+  listed: () => Promise<Release[]>,
   tag: string,
   release: Release | null,
 ): Promise<string> {
-  const { items } = await githubPaginate<unknown>(auth, `${repo}/releases`, { maxPages: 1 });
-  const before = release?.created_at ? Date.parse(release.created_at) : Date.now();
-  const found = items
-    .map((item) => releaseReply.safeParse(item))
-    .flatMap((parsed) => (parsed.success ? [parsed.data] : []))
+  const before =
+    release && !release.draft && release.created_at ? Date.parse(release.created_at) : Date.now();
+  const found = (await listed())
     .filter(
       (r) =>
         !r.draft &&
@@ -341,6 +341,28 @@ async function previousRelease(
 }
 
 /**
+ * The commits on the first-parent line from the tag down through the compared commits. Every
+ * other compared commit was brought in by a merge commit on that line, and the pull request that
+ * merge commit merged is found through the merge commit itself, so its branch commits need no
+ * lookup of their own. Null when the line can't be told: a commit without its parents, or a head
+ * that is no compared commit.
+ * @param commits The compared commits, oldest first as GitHub lists them
+ */
+function mainline(commits: Commit[]): Set<string> | null {
+  if (!commits.length || commits.some((c) => !c.parents)) return null;
+  const bySha = new Map(commits.map((c) => [c.sha, c]));
+  const line = new Set<string>();
+  for (
+    let at = commits.at(-1);
+    at && !line.has(at.sha);
+    at = bySha.get(at.parents?.[0]?.sha ?? '')
+  ) {
+    line.add(at.sha);
+  }
+  return line;
+}
+
+/**
  * The pull requests in the commits between two tags: the stored merged ones whose merge commit
  * is among them, then GitHub's answer for each commit none of those matched (at most 100 calls),
  * keeping pull requests merged into the default branch.
@@ -348,12 +370,15 @@ async function previousRelease(
  * @param repo The repository's API path
  * @param link The repository link
  * @param shas The commits
+ * @param onMainline The commits on the tag's first-parent line, or null when unknown: only those
+ *   are looked up, as a commit off it came in through a merge commit on it
  */
 async function pullsOfCommits(
   auth: GithubAuth,
   repo: string,
   link: GithubRepoLink,
   shas: string[],
+  onMainline: Set<string> | null,
 ): Promise<{ pulls: NotePull[]; truncated: boolean }> {
   const stored = shas.length
     ? await prisma.githubPullRequest.findMany({
@@ -379,7 +404,9 @@ async function pullsOfCommits(
       ]),
   );
   const matched = new Set(stored.map((pr) => pr.mergeCommitSha));
-  const unmatched = shas.filter((sha) => !matched.has(sha));
+  const unmatched = shas.filter(
+    (sha) => !matched.has(sha) && (onMainline === null || onMainline.has(sha)),
+  );
 
   const found = new Map<number, NotePull>();
   let calls = 0;
@@ -535,7 +562,18 @@ export async function writeReleaseNotes(
     },
   );
 
-  const release = await githubRequest<unknown>(
+  // The first page of the Releases, drafts included (the caller can push): read once, for a draft
+  // of the tag and for the previous tag
+  let page1: Promise<Release[]> | null = null;
+  const listed = () =>
+    (page1 ??= githubPaginate<unknown>(auth, `${repo}/releases`, { maxPages: 1 }).then(
+      ({ items }) =>
+        items.flatMap((item) => {
+          const parsed = releaseReply.safeParse(item);
+          return parsed.success ? [parsed.data] : [];
+        }),
+    ));
+  const published = await githubRequest<unknown>(
     auth,
     'GET',
     `${repo}/releases/tags/${tagPath(tag)}`,
@@ -546,6 +584,10 @@ export async function writeReleaseNotes(
       throw err;
     },
   );
+  // GitHub answers a published Release by tag only: a draft of the tag is found in the list, and
+  // gets its body written while it stays a draft, so Axiom never publishes a person's draft
+  const release =
+    published ?? (await listed()).find((r) => r.draft === true && r.tag_name === tag) ?? null;
   const body = release?.body ?? '';
   if (body.trim() && !writtenByAxiom(body) && !replaceBody) {
     throw new AppError(
@@ -555,7 +597,7 @@ export async function writeReleaseNotes(
     );
   }
 
-  const previous = input.previousTag ?? (await previousRelease(auth, repo, tag, release));
+  const previous = input.previousTag ?? (await previousRelease(listed, tag, release));
   const compared = await githubPaginate<unknown>(
     auth,
     `${repo}/compare/${tagPath(previous)}...${tagPath(tag)}`,
@@ -570,14 +612,11 @@ export async function writeReleaseNotes(
     }
     throw err;
   });
-  const shas = [
-    ...new Set(
-      compared.items.flatMap((item) => {
-        const parsed = commitReply.safeParse(item);
-        return parsed.success ? [parsed.data.sha] : [];
-      }),
-    ),
-  ];
+  const commits = compared.items.flatMap((item) => {
+    const parsed = commitReply.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const shas = [...new Set(commits.map((c) => c.sha))];
   if (!shas.length) {
     throw new AppError(
       400,
@@ -586,7 +625,13 @@ export async function writeReleaseNotes(
     );
   }
 
-  const found = await pullsOfCommits(auth, repo, link, shas);
+  const found = await pullsOfCommits(
+    auth,
+    repo,
+    link,
+    shas,
+    compared.complete ? mainline(commits) : null,
+  );
   const truncated = !compared.complete || found.truncated;
   const { tickets, keysByPull } = await ticketsOf(link, found.pulls);
   const withKeys = found.pulls.map((pr) => ({

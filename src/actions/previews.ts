@@ -16,6 +16,7 @@ import {
   linkedBranch,
   linkedPullRequest,
 } from '../modules/github/github-actions.helpers';
+import { RELEASE_MARKER_PREFIX } from '../modules/github/release-notes.service';
 import { countLinkedIssues } from '../modules/github/repo-link.service';
 import { assertIssueRefsInProject } from '../modules/issues/issue-references';
 import { ERR } from '../utils/error-messages';
@@ -1845,26 +1846,42 @@ export async function githubImportConfigure(projectId: string, enabled: boolean)
 
 /**
  * What writing the release notes of a tag does, as the approver reads it. The repository is the
- * stored one; the tag is the caller's, already held to git's ref rules by the input.
+ * stored one; the tag is the caller's, already held to git's ref rules by the input. With
+ * replaceBody, a page `Release <tag>` that Axiom did not write is named too, as it is replaced.
  * @param projectId The project
  * @param tag The release tag
  * @param replaceBody Whether a body a person wrote is replaced
+ * @param spaceId The space the request names, else the project's setting is read
  * @throws {AppError} 404 when the project is not linked to a GitHub repository
  */
 export async function githubReleaseNotes(
   projectId: string,
   tag: string,
   replaceBody: boolean,
+  spaceId?: string,
 ): Promise<string> {
   const link = await prisma.githubRepoLink.findUnique({
     where: { projectId },
-    select: { fullName: true },
+    select: { fullName: true, releaseNotesSpaceId: true },
   });
   if (!link)
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
-  return replaceBody
-    ? `Replace the body of GitHub release ${tag} in ${link.fullName} with release notes`
-    : `Write the release notes of ${tag} in ${link.fullName} to a wiki page and the GitHub release`;
+  if (!replaceBody) {
+    return `Write the release notes of ${tag} in ${link.fullName} to a wiki page and the GitHub release`;
+  }
+  const space = spaceId ?? link.releaseNotesSpaceId;
+  const title = `Release ${tag}`;
+  const page = space
+    ? await prisma.page.findFirst({
+        where: { spaceId: space, title },
+        orderBy: { createdAt: 'asc' },
+        select: { body: true, space: { select: { name: true } } },
+      })
+    : null;
+  const ownPage = page && !page.body.startsWith(RELEASE_MARKER_PREFIX);
+  return ownPage
+    ? `Replace the body of GitHub release ${tag} in ${link.fullName} and the wiki page "${title}" in ${page.space.name} with release notes`
+    : `Replace the body of GitHub release ${tag} in ${link.fullName} with release notes`;
 }
 
 const SHORT_SHA = 12;

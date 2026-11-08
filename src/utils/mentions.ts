@@ -27,12 +27,27 @@ function visible(tokens: Token[], separator: string): string {
     if (token.type === 'html') {
       if (/^<code[\s>]/i.test(token.raw)) inCode = true;
       else if (/^<\/code\s*>/i.test(token.raw)) inCode = false;
-      out += ' ';
+      // A block of HTML (a table the editor could not write as GFM, a pasted <details>) shows
+      // its text: that counts, all but its code and its comments
+      out +=
+        !inCode && (token as Node & { block?: boolean }).block ? htmlBlockText(token.raw) : ' ';
       return;
     }
     out += inCode ? ' ' : textOf(token as Node);
   });
   return out;
+}
+
+/**
+ * The text of a block of HTML as a reader sees it: comments, `<pre>`, `<code>`, `<script>` and
+ * `<style>` left out, every tag a blank.
+ * @param html The block's HTML
+ */
+function htmlBlockText(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?(-->|$)/g, ' ')
+    .replace(/<(pre|code|script|style)\b[^>]*>[\s\S]*?(<\/\1\s*>|$)/gi, ' ')
+    .replace(/<[^>]*>/g, ' ');
 }
 
 // A link whose text is its own address reads as an autolink, as the frontend renders it

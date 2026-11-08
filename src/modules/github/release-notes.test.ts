@@ -685,6 +685,104 @@ describe('githubRelease.writeNotes', () => {
     expect(fake.requests.filter((r) => r.path.includes('/compare/'))).toHaveLength(10);
   });
 
+  it('refuses a hand-written draft Release of the tag, and posts nothing', async () => {
+    fake.on('GET /repos/:owner/:repo/releases', {
+      status: 200,
+      body: [
+        {
+          id: 5595,
+          tag_name: 'v1.2.0',
+          body: 'Draft notes by hand',
+          draft: true,
+          created_at: '2026-11-03T00:00:00Z',
+          published_at: null,
+        },
+      ],
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_RELEASE_BODY_EXISTS');
+    expect(releaseWrites()).toEqual([]);
+    expect(await notesPage()).toBeNull();
+  });
+
+  it('writes the body of a draft Release of the tag and leaves it a draft', async () => {
+    const draft = {
+      id: 5596,
+      tag_name: 'v1.2.0',
+      body: '',
+      draft: true,
+      created_at: '2026-11-03T00:00:00Z',
+      published_at: null,
+    };
+    // The PATCH handler finds it by id; the lookup by tag never answers a draft
+    releases.set('draft', {
+      id: draft.id,
+      tag_name: 'v1.2.0',
+      body: '',
+      created_at: draft.created_at,
+    });
+    fake.on('GET /repos/:owner/:repo/releases', (_req) => {
+      const list = JSON.parse(
+        JSON.stringify([
+          draft,
+          {
+            id: 5502,
+            tag_name: 'v1.1.0',
+            draft: false,
+            created_at: '2026-10-01T10:00:00Z',
+            published_at: '2026-10-01T10:05:00Z',
+          },
+        ]),
+      );
+      return { status: 200, body: list };
+    });
+    const res = await write({ tag: 'v1.2.0' });
+    expect(res.status).toBe(201);
+    const writes = releaseWrites();
+    expect(writes.map((r) => `${r.method} ${r.path}`)).toEqual([
+      `PATCH /repositories/${REPO_ID}/releases/5596`,
+    ]);
+    expect(Object.keys(writes[0].body as object)).toEqual(['body']);
+    expect(markerOf(releases.get('draft')?.body ?? '').matches).toBe(true);
+    // The Releases list was read once, for the draft and the previous tag alike
+    expect(
+      fake.requests.filter((r) => r.path === `/repositories/${REPO_ID}/releases`),
+    ).toHaveLength(1);
+  });
+
+  it('says in the preview that replaceBody also replaces a page Axiom did not write', async () => {
+    await prisma.page.create({
+      data: { spaceId, title: 'Release v1.2.0', slug: 'release-v1-2-0', body: 'Our own notes' },
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0', replaceBody: true }, asToken());
+    expect(res.status).toBe(202);
+    expect(res.body.preview).toBe(
+      `Replace the body of GitHub release v1.2.0 in ${WIDGET} and the wiki page "Release v1.2.0" in Releases with release notes`,
+    );
+  });
+
+  it('looks up only the mainline commits that no stored pull request merged', async () => {
+    // #7 is merged by sha(1), whose second parent brings in its branch commit sha(2)
+    fake.on('GET /repos/:owner/:repo/compare/:basehead', {
+      status: 200,
+      body: {
+        commits: [
+          { sha: sha(2), parents: [{ sha: sha(6) }] },
+          { sha: sha(1), parents: [{ sha: sha(5) }, { sha: sha(2) }] },
+          { sha: sha(4), parents: [{ sha: sha(1) }] },
+          { sha: sha(3), parents: [{ sha: sha(4) }] },
+        ],
+      },
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body.pullRequests).toBe(2);
+    expect(fake.requests.filter((r) => r.path.endsWith('/pulls')).map((r) => r.path)).toEqual([
+      `/repositories/${REPO_ID}/commits/${sha(4)}/pulls`,
+    ]);
+  });
+
   it('refuses a tag that is no valid ref name', async () => {
     const res = await write({ tag: 'v1 2\nreplace' });
     expect(res.status).toBe(400);
