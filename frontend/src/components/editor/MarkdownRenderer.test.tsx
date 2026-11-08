@@ -131,7 +131,7 @@ describe('MarkdownRenderer mentions and issue keys agree with the notifier', () 
   });
 
   it('styles nothing for an email address', () => {
-    expect(mentions('mail a@b.com now')).toEqual([]);
+    expect(mentions('mail a@b.invalid now')).toEqual([]);
   });
 
   it('styles a mention after an even number of backslashes', () => {

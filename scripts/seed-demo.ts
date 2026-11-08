@@ -20,6 +20,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
+import { createDefaultGithubRules } from '../src/modules/github/default-rules';
 import { seedGithubDemo } from './seed-github-demo';
 import { seedPageMentions } from './seed-page-mentions';
 
@@ -196,19 +197,137 @@ async function main() {
   };
 
   const issues: IssueSeed[] = [
-    { title: 'Board drop puts the card at the bottom of the column', body: 'Dropping a card between two others in a board column moves it to the bottom. The move endpoint ignores the target index and appends to the column.', type: 'BUG', priority: 'CRITICAL', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'bug'] },
-    { title: 'Issue search ignores quoted phrases', body: 'Searching for `"dark mode"` with quotes matches every issue that contains either word. The query lexer drops the quotes before the parser sees them.', type: 'BUG', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'test', labels: ['backend', 'bug'] },
-    { title: 'Wiki page shows a blank editor after a failed save', body: 'When a save fails (for example on an expired session) the editor clears instead of keeping the draft. The page needs an error state that keeps the unsaved content.', type: 'BUG', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'bug'] },
-    { title: 'Linked wiki pages on the issue detail sidebar', body: 'Show the wiki pages that mention or embed an issue in a card on the issue detail sidebar, with a link to each page.', type: 'STORY', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'Automation conditions use the query language', body: 'Automation rule conditions should accept the same query strings as issue search, for example `type = Bug AND priority > Medium`, evaluated against the issue that triggered the rule.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'enhancement'] },
-    { title: 'Saved filters on the issue list', body: 'Let users save the current issue list query under a name and pick it again from the filter bar.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
-    { title: 'Sprint report with burndown chart', body: 'Add a sprint report page with a burndown chart, the committed and completed issue counts, and the scope added after the sprint started.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'Notification preferences per event type', body: 'Users can turn in-app and email notifications on or off for each event type (assigned, mentioned, commented, status changed).', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'test', labels: ['frontend', 'backend'] },
-    { title: 'Require two-factor authentication per organization', body: 'Organization owners can require 2FA. Members without it are sent to the 2FA setup page before they can use any other route.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'enhancement'] },
-    { title: 'Approval gates on status transitions', body: 'Settings page for approval gates: moving an issue into a gated column creates an approval request that the listed approvers vote on.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
-    { title: 'Template variables in wiki templates', body: 'Resolve `{{expression}}` variables such as `{{currentUser().displayName}}` and `{{now()}}` when a page is created from a template.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'enhancement'] },
-    { title: 'Public intake forms create issues', body: 'A project can publish a form at a public URL. Each submission creates an issue in the project with the answers in the body.', type: 'TASK', priority: 'LOW', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'Dark mode support', body: 'Add dark mode theme toggle. The CSS variable design token system already supports it, just needs a toggle and persistence.', type: 'TASK', priority: 'MEDIUM', column: 'In Progress', assignee: 'test', creator: 'tim', dueDate: futureDate(7), labels: ['frontend'] },
+    {
+      title: 'Board drop puts the card at the bottom of the column',
+      body: 'Dropping a card between two others in a board column moves it to the bottom. The move endpoint ignores the target index and appends to the column.',
+      type: 'BUG',
+      priority: 'CRITICAL',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['backend', 'bug'],
+    },
+    {
+      title: 'Issue search ignores quoted phrases',
+      body: 'Searching for `"dark mode"` with quotes matches every issue that contains either word. The query lexer drops the quotes before the parser sees them.',
+      type: 'BUG',
+      priority: 'HIGH',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'test',
+      labels: ['backend', 'bug'],
+    },
+    {
+      title: 'Wiki page shows a blank editor after a failed save',
+      body: 'When a save fails (for example on an expired session) the editor clears instead of keeping the draft. The page needs an error state that keeps the unsaved content.',
+      type: 'BUG',
+      priority: 'HIGH',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['frontend', 'bug'],
+    },
+    {
+      title: 'Linked wiki pages on the issue detail sidebar',
+      body: 'Show the wiki pages that mention or embed an issue in a card on the issue detail sidebar, with a link to each page.',
+      type: 'STORY',
+      priority: 'HIGH',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['frontend', 'enhancement'],
+    },
+    {
+      title: 'Automation conditions use the query language',
+      body: 'Automation rule conditions should accept the same query strings as issue search, for example `type = Bug AND priority > Medium`, evaluated against the issue that triggered the rule.',
+      type: 'STORY',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['backend', 'enhancement'],
+    },
+    {
+      title: 'Saved filters on the issue list',
+      body: 'Let users save the current issue list query under a name and pick it again from the filter bar.',
+      type: 'TASK',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['frontend'],
+    },
+    {
+      title: 'Sprint report with burndown chart',
+      body: 'Add a sprint report page with a burndown chart, the committed and completed issue counts, and the scope added after the sprint started.',
+      type: 'STORY',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['frontend', 'enhancement'],
+    },
+    {
+      title: 'Notification preferences per event type',
+      body: 'Users can turn in-app and email notifications on or off for each event type (assigned, mentioned, commented, status changed).',
+      type: 'STORY',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'test',
+      labels: ['frontend', 'backend'],
+    },
+    {
+      title: 'Require two-factor authentication per organization',
+      body: 'Organization owners can require 2FA. Members without it are sent to the 2FA setup page before they can use any other route.',
+      type: 'STORY',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['backend', 'enhancement'],
+    },
+    {
+      title: 'Approval gates on status transitions',
+      body: 'Settings page for approval gates: moving an issue into a gated column creates an approval request that the listed approvers vote on.',
+      type: 'TASK',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['frontend'],
+    },
+    {
+      title: 'Template variables in wiki templates',
+      body: 'Resolve `{{expression}}` variables such as `{{currentUser().displayName}}` and `{{now()}}` when a page is created from a template.',
+      type: 'TASK',
+      priority: 'MEDIUM',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['backend', 'enhancement'],
+    },
+    {
+      title: 'Public intake forms create issues',
+      body: 'A project can publish a form at a public URL. Each submission creates an issue in the project with the answers in the body.',
+      type: 'TASK',
+      priority: 'LOW',
+      column: 'Done',
+      assignee: 'tim',
+      creator: 'tim',
+      labels: ['frontend', 'enhancement'],
+    },
+    {
+      title: 'Dark mode support',
+      body: 'Add dark mode theme toggle. The CSS variable design token system already supports it, just needs a toggle and persistence.',
+      type: 'TASK',
+      priority: 'MEDIUM',
+      column: 'In Progress',
+      assignee: 'test',
+      creator: 'tim',
+      dueDate: futureDate(7),
+      labels: ['frontend'],
+    },
   ];
 
   const maxIssue = await prisma.issue.findFirst({
@@ -232,9 +351,7 @@ async function main() {
       continue;
     }
 
-    const labelIds = (issue.labels ?? [])
-      .filter((l) => labels[l])
-      .map((l) => ({ id: labels[l] }));
+    const labelIds = (issue.labels ?? []).filter((l) => labels[l]).map((l) => ({ id: labels[l] }));
 
     const created = await prisma.issue.create({
       data: {
@@ -268,6 +385,8 @@ async function main() {
     if (outcome === 'seeded') {
       console.warn('        GitHub: acme-labs/widget linked to "Dark mode support"');
     }
+    // The rules a real link gets; made by name, so a re-run adds nothing
+    if (outcome === 'seeded') await createDefaultGithubRules(project.id);
   }
 
   // ────────────────────────────────────────────────────────────
@@ -284,21 +403,36 @@ async function main() {
     {
       issueTitle: 'Board drop puts the card at the bottom of the column',
       comments: [
-        { author: 'tim', body: 'Root cause found: the move handler computed the new position before reading the target index from the request. Fix is to pass the index through and renumber the column in one transaction.' },
-        { author: 'test', body: 'Confirmed. Dropping at the top, in the middle and at the bottom of a column all land where expected now.' },
+        {
+          author: 'tim',
+          body: 'Root cause found: the move handler computed the new position before reading the target index from the request. Fix is to pass the index through and renumber the column in one transaction.',
+        },
+        {
+          author: 'test',
+          body: 'Confirmed. Dropping at the top, in the middle and at the bottom of a column all land where expected now.',
+        },
       ],
     },
     {
       issueTitle: 'Linked wiki pages on the issue detail sidebar',
       comments: [
-        { author: 'test', body: 'Works well. One suggestion: could the card update live when someone mentions the issue in a page that is open elsewhere?' },
-        { author: 'tim', body: 'Good idea. The card now refreshes on the realtime link update event.' },
+        {
+          author: 'test',
+          body: 'Works well. One suggestion: could the card update live when someone mentions the issue in a page that is open elsewhere?',
+        },
+        {
+          author: 'tim',
+          body: 'Good idea. The card now refreshes on the realtime link update event.',
+        },
       ],
     },
     {
       issueTitle: 'Dark mode support',
       comments: [
-        { author: 'test', body: 'Working on this. The CSS variable system is already set up with semantic tokens (`--color-surface-primary`, etc.). Just need:\n\n1. A theme toggle component in the navbar\n2. `prefers-color-scheme` media query for system default\n3. Persist choice in localStorage' },
+        {
+          author: 'test',
+          body: 'Working on this. The CSS variable system is already set up with semantic tokens (`--color-surface-primary`, etc.). Just need:\n\n1. A theme toggle component in the navbar\n2. `prefers-color-scheme` media query for system default\n3. Persist choice in localStorage',
+        },
       ],
     },
   ];
@@ -361,7 +495,9 @@ async function main() {
       const body = fs.readFileSync(path.join(docsDir, file), 'utf-8');
       // Derive title from first H1, or from filename
       const h1Match = body.match(/^#\s+(.+)$/m);
-      const title = h1Match ? h1Match[1] : slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const title = h1Match
+        ? h1Match[1]
+        : slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
       if (existingPage) {
         // Update existing page with latest content from docs/
@@ -399,7 +535,10 @@ async function main() {
   // Remove wiki pages whose docs/*.md file was deleted or renamed
   if (fs.existsSync(docsDir)) {
     const docSlugs = new Set(
-      fs.readdirSync(docsDir).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, '')),
+      fs
+        .readdirSync(docsDir)
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => f.replace(/\.md$/, '')),
     );
     const allPages = await prisma.page.findMany({
       where: { spaceId: wikiSpace.id },
@@ -596,4 +735,8 @@ main()
     console.error('Seed failed:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    // The rule service opens a Redis connection that would keep the script alive
+    process.exit(0);
+  });

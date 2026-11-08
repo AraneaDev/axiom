@@ -8,6 +8,8 @@ let ctx: TestContext;
 let issueId: string;
 
 beforeAll(async () => {
+  // The demo repository may be linked to the demo project by seed-demo.test.ts, which runs first
+  await prisma.githubRepoLink.deleteMany({ where: { repoId: { in: [-910000001n, 910000001n] } } });
   ctx = await createTestContext('seedgh');
   issueId = (
     await prisma.issue.create({

@@ -79,7 +79,7 @@ function visibleText(text: string): string {
 
 /**
  * Parse `@username` mentions from text.
- * A mention has no letter, digit or underscore right before the `@` (so `a@b.com` mentions
+ * A mention has no letter, digit or underscore right before the `@` (so `a@b.invalid` mentions
  * nobody), is not escaped with a backslash, and is plain text: not in code, a link address, an
  * autolink or raw HTML.
  * Returns an array of unique usernames (without the @ prefix).

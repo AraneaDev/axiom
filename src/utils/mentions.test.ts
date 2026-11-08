@@ -29,8 +29,8 @@ describe('parseMentions', () => {
 
   it('does not read an email address as a mention', () => {
     expect(parseMentions('email@host')).toEqual([]);
-    expect(parseMentions('a@b.com')).toEqual([]);
-    expect(parseMentions('mail a@b.com, @tim')).toEqual(['tim']);
+    expect(parseMentions('a@b.invalid')).toEqual([]);
+    expect(parseMentions('mail a@b.invalid, @tim')).toEqual(['tim']);
   });
 
   it('needs a word boundary or the start of the text before the @', () => {

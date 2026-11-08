@@ -224,4 +224,14 @@ describe('seed-demo', () => {
     const text = issues.flatMap((i) => [i.body ?? '', ...i.comments.map((c) => c.body)]);
     expect(text.filter((t) => t.includes('src/mcp'))).toEqual([]);
   });
+
+  it('gives the linked demo project its default GitHub rules, once (M10)', async () => {
+    const project = await prisma.project.findFirstOrThrow({ where: { prefix: 'AXM' } });
+    const rules = await prisma.automationRule.findMany({
+      where: { projectId: project.id, name: { startsWith: 'GitHub:' } },
+    });
+    const names = rules.map((r) => r.name);
+    expect(names).toContain('GitHub: comment when checks fail');
+    expect(new Set(names).size).toBe(names.length);
+  });
 });
