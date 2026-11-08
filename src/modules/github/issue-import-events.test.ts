@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { GithubRepoLink } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import {
@@ -19,7 +19,10 @@ import { postWebhook } from '../../test/github-webhook';
 import { createRule } from '../automation/automation.service';
 import { updateIssue } from '../issues/issues.service';
 
+import { hourStartOf, importCapState, LIVE_IMPORT_CAP } from './import-cap';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
+import { importGithubIssue, type GithubIssuePayload } from './issue-import.service';
+import { reconcileRepo } from './reconcile.service';
 import './github-resolvers';
 import './webhook-handlers';
 
@@ -47,8 +50,10 @@ let ctx: TestContext;
 let member: TestUser;
 let link: GithubRepoLink;
 
+let lastDeliveryId = '';
 async function deliver(event: string, payload: Payload) {
   const deliveryId = randomUUID();
+  lastDeliveryId = deliveryId;
   const res = await postWebhook(
     event,
     { repository, sender, installation: { id: INSTALLATION_ID }, ...payload },
@@ -381,5 +386,124 @@ describe('import switched off', () => {
     expect(await commentEvent('created', comment())).toBe('IGNORED');
     expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(0);
     expect(fake.requests.filter((r) => r.method === 'POST')).toHaveLength(0);
+  });
+});
+
+describe('the hourly cap on live imports', () => {
+  const HOUR = 3_600_000;
+  const fill = (over: { issues?: number; comments?: number }) =>
+    prisma.githubImportCap.create({
+      data: { repoLinkId: link.id, hourStart: hourStartOf(new Date()), ...over },
+    });
+  const lastError = async () =>
+    (await prisma.githubDelivery.findUniqueOrThrow({ where: { id: lastDeliveryId } })).error;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('skips the 101st new issue of the hour, counts it and reports the pause', async () => {
+    await fill({ issues: LIVE_IMPORT_CAP.issues - 1 });
+    expect(await issuesEvent('opened', ghIssue())).toBe('PROCESSED');
+    expect(await issuesEvent('opened', ghIssue({ number: 33, id: 2200033 }))).toBe('IGNORED');
+    expect(await lastError()).toMatch(/hourly import cap of 100 new issues/);
+    expect(await importOf(33)).toBeNull();
+    // No retry storm: an ignored delivery is not retried
+    const row = await prisma.githubDelivery.findUniqueOrThrow({ where: { id: lastDeliveryId } });
+    expect(row.nextAttemptAt).toBeNull();
+
+    const state = await importCapState(link.id);
+    const hourStart = hourStartOf(new Date());
+    expect(state).toEqual({
+      paused: true,
+      resumesAt: new Date(hourStart.getTime() + HOUR),
+      issues: { used: 100, limit: 100, skipped: 1 },
+      comments: { used: 0, limit: 300, skipped: 0 },
+    });
+  });
+
+  it('skips the 301st new comment of the hour and counts it', async () => {
+    await issuesEvent('opened', ghIssue());
+    await prisma.githubImportCap.update({
+      where: { repoLinkId_hourStart: { repoLinkId: link.id, hourStart: hourStartOf(new Date()) } },
+      data: { comments: LIVE_IMPORT_CAP.comments - 1 },
+    });
+    expect(await commentEvent('created', comment())).toBe('PROCESSED');
+    expect(await commentEvent('created', comment({ id: 9402 }))).toBe('IGNORED');
+    expect(await lastError()).toMatch(/hourly import cap of 300 new comments/);
+    expect((await imported()).comments).toHaveLength(1);
+    const state = await importCapState(link.id);
+    expect(state.paused).toBe(true);
+    expect(state.comments).toEqual({ used: 300, limit: 300, skipped: 1 });
+  });
+
+  it('does not cap updates of what is imported, nor the backfill', async () => {
+    await issuesEvent('opened', ghIssue());
+    await commentEvent('created', comment());
+    await prisma.githubImportCap.updateMany({
+      where: { repoLinkId: link.id },
+      data: { issues: LIVE_IMPORT_CAP.issues, comments: LIVE_IMPORT_CAP.comments },
+    });
+    expect(
+      await issuesEvent(
+        'edited',
+        ghIssue({ title: 'Renamed', updated_at: '2026-11-07T12:00:00Z' }),
+      ),
+    ).toBe('PROCESSED');
+    expect((await imported()).title).toBe('Renamed');
+    expect(
+      await commentEvent(
+        'edited',
+        comment({ body: 'Edited on GitHub', updated_at: '2026-11-07T12:00:00Z' }),
+      ),
+    ).toBe('PROCESSED');
+    expect((await imported()).comments[0].body).toBe('Edited on GitHub');
+    // The backfill leaves `live` unset
+    const backfilled = await importGithubIssue(
+      link,
+      ghIssue({ number: 33, id: 2200033 }) as GithubIssuePayload,
+      { withComments: false },
+    );
+    expect(backfilled?.created).toBe(true);
+    expect((await importCapState(link.id)).issues.skipped).toBe(0);
+  });
+
+  it('opens again in the next hour', async () => {
+    await fill({ issues: LIVE_IMPORT_CAP.issues });
+    expect(await issuesEvent('opened', ghIssue())).toBe('IGNORED');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(hourStartOf(new Date()).getTime() + HOUR + 1000);
+    expect((await importCapState(link.id)).paused).toBe(false);
+    expect(await issuesEvent('opened', ghIssue())).toBe('PROCESSED');
+    expect(await importOf()).not.toBeNull();
+  });
+
+  it('lets the reconcile after the pause import what the cap turned away', async () => {
+    await issuesEvent('opened', ghIssue());
+    await prisma.githubImportCap.updateMany({
+      where: { repoLinkId: link.id },
+      data: { issues: LIVE_IMPORT_CAP.issues, comments: LIVE_IMPORT_CAP.comments },
+    });
+    const recent = new Date().toISOString();
+    const missed = ghIssue({ number: 33, id: 2200033, updated_at: recent });
+    const missedComment = comment({ id: 9405, updated_at: recent, created_at: recent });
+    fake.setRepoLists(FULL_NAME, {
+      issues: [ghIssue(), missed],
+      issueComments: { '31': [missedComment] },
+      pulls: [],
+      branches: [],
+      checkRuns: {},
+    });
+    expect(await issuesEvent('opened', missed)).toBe('IGNORED');
+    expect(await commentEvent('created', missedComment)).toBe('IGNORED');
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(hourStartOf(new Date()).getTime() + HOUR + 1000);
+    await reconcileRepo(link.id);
+    expect(await importOf(33)).not.toBeNull();
+    expect((await imported()).comments.map((c) => c.body)).toEqual([missedComment.body]);
+    const state = await importCapState(link.id);
+    expect(state.issues.used).toBe(1);
+    expect(state.comments.used).toBe(1);
   });
 });

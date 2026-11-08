@@ -128,14 +128,16 @@ export interface GithubFake {
       checkRuns?: Record<string, Array<Record<string, unknown>>>;
       branches?: Array<{ name: string; sha: string }>;
       /**
-       * GitHub Issues: `GET .../issues` (by `state`, open by default, pull requests included as
-       * GitHub lists them) and `.../issues/:number`. Commenting works on these as on `pulls`.
+       * GitHub Issues: `GET .../issues` (by `state`, open by default, and `since`, pull requests
+       * included as GitHub lists them) and `.../issues/:number`. Commenting works on these as on
+       * `pulls`.
        */
       issues?: Array<Record<string, unknown>>;
       /**
        * The comments of an issue or pull request by number, served by
-       * `GET .../issues/:number/comments` (with `since`, as GitHub filters it); a comment posted on
-       * one is added here. Without it the fixtures answer that route.
+       * `GET .../issues/:number/comments` and, all of them with an `issue_url`, by
+       * `GET .../issues/comments` (both with `since`, as GitHub filters it); a comment posted on
+       * one is added here. Without it the fixtures answer those routes.
        */
       issueComments?: Record<string, Array<Record<string, unknown>>>;
     },
@@ -1114,9 +1116,29 @@ class GithubFakeServer implements GithubFake {
     if (rest === 'branches' && lists.branches) {
       return page(lists.branches.map((b) => ({ name: b.name, commit: { sha: b.sha } })));
     }
+    // `since` keeps what was updated at or after it, as GitHub does
+    const since = req.query.since ? Date.parse(req.query.since) : null;
+    const fresh = (item: Record<string, unknown>) =>
+      since === null || Date.parse(String(item.updated_at ?? item.created_at)) >= since;
     if (rest === 'issues' && lists.issues) {
       const wanted = req.query.state ?? 'open';
-      return page(lists.issues.filter((item) => wanted === 'all' || item.state === wanted));
+      return page(
+        lists.issues.filter((item) => (wanted === 'all' || item.state === wanted) && fresh(item)),
+      );
+    }
+    // Every comment of the repository's issues and pull requests, each with its issue_url
+    if (rest === 'issues/comments' && lists.issueComments) {
+      const key = repoKey(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`);
+      return page(
+        Object.entries(lists.issueComments)
+          .flatMap(([number, comments]) =>
+            comments.map((c) => ({
+              issue_url: `https://api.github.com/repos/${key}/issues/${number}`,
+              ...c,
+            })),
+          )
+          .filter(fresh),
+      );
     }
     const issue = /^issues\/(\d+)$/.exec(rest);
     if (issue && lists.issues) {
@@ -1125,14 +1147,7 @@ class GithubFakeServer implements GithubFake {
     }
     const issueComments = /^issues\/(\d+)\/comments$/.exec(rest);
     if (issueComments && lists.issueComments) {
-      // `since` keeps the comments updated at or after it, as GitHub does
-      const since = req.query.since ? Date.parse(req.query.since) : null;
-      const all = lists.issueComments[issueComments[1]] ?? [];
-      return page(
-        since === null
-          ? all
-          : all.filter((c) => Date.parse(String(c.updated_at ?? c.created_at)) >= since),
-      );
+      return page((lists.issueComments[issueComments[1]] ?? []).filter(fresh));
     }
     return null;
   }

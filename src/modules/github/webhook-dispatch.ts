@@ -10,7 +10,12 @@ export type GithubDeliveryContext = {
   receivedAt: Date;
 };
 
-export type GithubEventHandler = (d: GithubDeliveryContext) => Promise<'processed' | 'ignored'>;
+/**
+ * What a handler made of a delivery. `{ ignored }` is ignored with a reason, stored on the
+ * delivery: something it chose not to do now, such as a capped import.
+ */
+export type GithubHandlerResult = 'processed' | 'ignored' | { ignored: string };
+export type GithubEventHandler = (d: GithubDeliveryContext) => Promise<GithubHandlerResult>;
 
 const handlers = new Map<string, GithubEventHandler[]>();
 

@@ -1484,6 +1484,7 @@ model GithubRepoLink {
   commits               GithubCommit[]
   checkRuns             GithubCheckRun[]
   issueImports          GithubIssueImport[]
+  importCaps            GithubImportCap[]
 
   @@map("github_repo_links")
 }
@@ -1516,6 +1517,22 @@ model GithubIssueImport {
 
   @@unique([repoLinkId, githubIssueNumber])
   @@map("github_issue_imports")
+}
+
+/// What live GitHub events imported into a link in one clock hour, against the hourly cap
+model GithubImportCap {
+  repoLinkId      String
+  /// The start of the clock hour (UTC)
+  hourStart       DateTime
+  issues          Int            @default(0)
+  comments        Int            @default(0)
+  /// What the cap turned away in that hour
+  skippedIssues   Int            @default(0)
+  skippedComments Int            @default(0)
+  repoLink        GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+
+  @@id([repoLinkId, hourStart])
+  @@map("github_import_caps")
 }
 
 /// A GitHub comment imported onto an imported issue, with the hash of the body last taken

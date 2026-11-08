@@ -259,8 +259,11 @@ export async function processDelivery(id: string): Promise<void> {
   };
   try {
     let processed = false;
+    let reason: string | null = null;
     for (const handler of handlersFor(row.event)) {
-      if ((await handler(context)) === 'processed') processed = true;
+      const result = await handler(context);
+      if (result === 'processed') processed = true;
+      else if (typeof result === 'object') reason ??= result.ignored.slice(0, 500);
     }
     // Only while this is still the claimed attempt: a run that outlived its lease must not
     // overwrite the run that claimed the delivery after it
@@ -270,7 +273,8 @@ export async function processDelivery(id: string): Promise<void> {
         status: processed ? 'PROCESSED' : 'IGNORED',
         processedAt: new Date(),
         nextAttemptAt: null,
-        error: null,
+        // Why it was ignored, when a handler said (as `App forgotten` is kept above)
+        error: processed ? null : reason,
       },
     });
   } catch (err) {

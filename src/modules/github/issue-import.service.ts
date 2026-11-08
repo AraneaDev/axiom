@@ -26,6 +26,7 @@ import {
   type GithubAuth,
 } from './github-client';
 import { githubUser, text, timestamp } from './github-store';
+import { ImportCappedError, takeImportSlot } from './import-cap';
 import { isIntegrationUser } from './integration-user';
 
 // Axiom's own limits: the issue title and body (issue-validators.ts), a comment body and a label
@@ -100,6 +101,11 @@ export type ImportOptions = {
    * one rule per old issue.
    */
   runRules?: { created?: boolean; updated?: boolean };
+  /**
+   * A live event (a webhook, or the reconcile catching one up): new issues and comments count
+   * against the link's hourly LIVE_IMPORT_CAP. The backfill leaves it unset.
+   */
+  live?: boolean;
 };
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -378,6 +384,7 @@ async function readFresh(link: GithubRepoLink, number: number): Promise<GithubIs
  * @param opts Whether to import the comments, who made the change, and which writes run rules
  * @returns What was done, or null when the issue is not imported (closed, a pull request, deleted
  *   in Axiom, or a payload that cannot be read)
+ * @throws {ImportCappedError} When a live import of a new issue finds the hour's cap reached
  */
 export async function importGithubIssue(
   link: GithubRepoLink,
@@ -408,6 +415,8 @@ export async function importGithubIssue(
     const row = await findImport(link.id, gh.number);
     if (row) return update(row);
     if (gh.state !== 'open') return null;
+    // Taken under the lock, so a duplicate delivery of the same issue does not use up a slot
+    if (opts.live) await takeImportSlot(link.id, 'issues');
     try {
       return await createImported(link, gh, opts);
     } catch (err) {
@@ -427,11 +436,24 @@ export async function importGithubIssue(
         commentsPath(link, gh.number),
         { maxPages: COMMENT_PAGES },
       );
-      for (const comment of items) await importComment(row, comment);
-      await prisma.githubIssueImport.update({
-        where: { id: row.id },
-        data: { commentsImportedAt: new Date() },
-      });
+      let complete = true;
+      for (const comment of items) {
+        try {
+          await importComment(row, comment, { live: opts.live });
+        } catch (err) {
+          // The hour's comments are used up: the rest are read again by the next event or
+          // reconcile, as the issue's comments stay unread
+          if (!(err instanceof ImportCappedError)) throw err;
+          complete = false;
+          break;
+        }
+      }
+      if (complete) {
+        await prisma.githubIssueImport.update({
+          where: { id: row.id },
+          data: { commentsImportedAt: new Date() },
+        });
+      }
     }
   }
   if (!done.linkCommentId) await postLinkComment(done.importId);
@@ -445,10 +467,14 @@ export async function importGithubIssue(
  * copy was deleted.
  * @param importRow The import of the issue the comment is on
  * @param ghComment The comment as GitHub gave it
+ * @param opts `live` counts a new comment against the link's hourly cap
+ * @param opts.live
+ * @throws {ImportCappedError} When a live new comment finds the hour's cap reached
  */
 export async function importComment(
   importRow: GithubIssueImport,
   ghComment: GithubCommentPayload,
+  opts: { live?: boolean } = {},
 ): Promise<void> {
   const issueId = importRow.issueId;
   if (!issueId) return;
@@ -492,6 +518,7 @@ export async function importComment(
       });
       return;
     }
+    if (opts.live) await takeImportSlot(importRow.repoLinkId, 'comments');
     const writer = await writerOf(gh.user, issue.projectId);
     const comment = await issuesService.addComment(issue.id, writer.userId, body, {
       skipMentions: true,

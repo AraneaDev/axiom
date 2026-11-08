@@ -21,7 +21,14 @@ import {
   type GithubAuth,
 } from './github-client';
 import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
-import { postPendingLinkComments } from './issue-import.service';
+import { ImportCappedError } from './import-cap';
+import {
+  importComment,
+  importGithubIssue,
+  postPendingLinkComments,
+  type GithubCommentPayload,
+  type GithubIssuePayload,
+} from './issue-import.service';
 import { extractIssueNumbers } from './issue-keys';
 
 export const RECONCILE_INTERVAL_MS = 15 * 60_000;
@@ -38,6 +45,8 @@ const LEASE_MS = 10 * 60_000;
 // Inside a long loop the lease is pushed out after this many records or this much time
 const LEASE_EVERY_RECORDS = 10;
 const LEASE_EVERY_MS = 60_000;
+/** How far back the reconcile looks for live imports it missed: an hour of cap pause and two rounds */
+const IMPORT_CATCH_UP_MS = 2 * 60 * 60_000;
 // A pull request GitHub answers 404 this many times in a row is taken for gone
 const MISSES_BEFORE_CLOSING = 3;
 const OPEN_PR_PAGES = 5;
@@ -496,6 +505,57 @@ async function runReconcile(
         }
       }
     });
+
+    // Live imports that the hourly cap (or an outage) turned away: the open issues and the
+    // comments GitHub changed in the last two hours. A pause ends with its hour and a reconcile
+    // runs every 15 minutes, so what was missed is still in the window. Reads count against the
+    // budget; the link comments these imports post are system writes outside it.
+    const importing = await prisma.githubRepoLink.findUnique({ where: { id: repoLinkId } });
+    if (importing?.importIssues && left(true) > 0) {
+      await phase('GitHub issues', async () => {
+        const since = new Date(Date.now() - IMPORT_CATCH_UP_MS).toISOString();
+        const issues = await githubPaginate<Record<string, unknown>>(
+          auth,
+          `/repositories/${link.repoId}/issues`,
+          { query: { state: 'open', sort: 'updated', direction: 'desc', since }, maxPages: 2 },
+        );
+        for (const item of issues.items) {
+          if (item.pull_request) continue;
+          try {
+            await importGithubIssue(importing, item as GithubIssuePayload, {
+              withComments: true,
+              live: true,
+            });
+          } catch (err) {
+            if (err instanceof ImportCappedError)
+              return incomplete('The hourly import cap was reached');
+            itemFailed('GitHub issue', err);
+          }
+        }
+        const comments = await githubPaginate<Record<string, unknown>>(
+          auth,
+          `/repositories/${link.repoId}/issues/comments`,
+          { query: { sort: 'updated', direction: 'desc', since }, maxPages: 2 },
+        );
+        for (const comment of comments.items) {
+          const number = /\/issues\/(\d+)$/.exec(String(comment.issue_url ?? ''))?.[1];
+          if (!number) continue;
+          const row = await prisma.githubIssueImport.findUnique({
+            where: {
+              repoLinkId_githubIssueNumber: { repoLinkId, githubIssueNumber: Number(number) },
+            },
+          });
+          if (!row?.issueId) continue;
+          try {
+            await importComment(row, comment as GithubCommentPayload, { live: true });
+          } catch (err) {
+            if (err instanceof ImportCappedError)
+              return incomplete('The hourly import cap was reached');
+            itemFailed('GitHub comment', err);
+          }
+        }
+      });
+    }
 
     // The repository itself, last so it only spends what the lists left: its default branch and
     // names follow a change on GitHub whose webhook was missed. A failure here costs nothing else.

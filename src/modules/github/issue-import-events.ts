@@ -8,6 +8,7 @@ import { logActivity } from '../activity/activity.service';
 
 import { orgActorId, resolveGithubActor } from './github-actor';
 import { senderSchema, timestamp, touchLinkDelivery } from './github-store';
+import { ImportCappedError } from './import-cap';
 import { importComment, importGithubIssue, type GithubIssuePayload } from './issue-import.service';
 import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
 
@@ -31,6 +32,20 @@ const IMPORTING = new Set(['opened', 'reopened', 'edited', 'labeled', 'unlabeled
 async function importingLink(d: GithubDeliveryContext) {
   const link = await touchLinkDelivery(d);
   return link?.importIssues ? link : null;
+}
+
+/**
+ * Runs an import, and answers a capped one as ignored with the reason: the delivery is not
+ * retried, and what it would have imported comes in on its next update or the next reconcile.
+ * @param work The import
+ */
+async function capped<T>(work: () => Promise<T>): Promise<T | { ignored: string }> {
+  try {
+    return await work();
+  } catch (err) {
+    if (err instanceof ImportCappedError) return { ignored: err.message };
+    throw err;
+  }
 }
 
 const findImport = (repoLinkId: string, githubIssueNumber: number) =>
@@ -82,12 +97,16 @@ onGithubEvent('issues', async (d) => {
     (d.action === 'opened' || d.action === 'labeled') &&
     !!createdAt &&
     new Date(createdAt) >= link.createdAt;
-  const result = await importGithubIssue(link, d.payload.issue as GithubIssuePayload, {
-    // Read once per import, so a delivery that failed after the issue was made reads them again
-    withComments: true,
-    sender,
-    runRules: { created: isNew, updated: true },
-  });
+  const result = await capped(() =>
+    importGithubIssue(link, d.payload.issue as GithubIssuePayload, {
+      // Read once per import, so a delivery that failed after the issue was made reads them again
+      withComments: true,
+      sender,
+      runRules: { created: isNew, updated: true },
+      live: true,
+    }),
+  );
+  if (typeof result === 'object' && result !== null && 'ignored' in result) return result;
   return result ? 'processed' : 'ignored';
 });
 
@@ -100,6 +119,8 @@ onGithubEvent('issue_comment', async (d) => {
   if (!link) return 'ignored';
   const row = await findImport(link.id, parsed.data.issue.number);
   if (!row?.issueId) return 'ignored';
-  await importComment(row, d.payload.comment as Parameters<typeof importComment>[1]);
-  return 'processed';
+  const result = await capped(() =>
+    importComment(row, d.payload.comment as Parameters<typeof importComment>[1], { live: true }),
+  );
+  return typeof result === 'object' && result !== null ? result : 'processed';
 });
