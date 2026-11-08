@@ -85,7 +85,9 @@ export function registerCommentGuard(guard: CommentGuard): () => void {
 }
 
 // What happened before the repository was linked may move tickets, but nobody is told of it
-registerCommentGuard((info) => info.eventAt !== null && info.eventAt >= info.linkedAt);
+const isNews = (info: Pick<CommentGuardInfo, 'eventAt' | 'linkedAt'>): boolean =>
+  info.eventAt !== null && info.eventAt >= info.linkedAt;
+registerCommentGuard(isNews);
 
 /**
  * Takes the one comment a trigger may make for an issue, a subject (pull request or branch) and a
@@ -157,6 +159,15 @@ async function guardedComment(info: CommentGuardInfo, write: () => Promise<void>
     );
     throw err;
   }
+}
+
+// Runs an email, a webhook call or a new issue only for news: the first sync and a re-link would
+// otherwise send one per open PR. Moves and field changes are not held back by it.
+async function guardedOutbound(
+  info: Pick<CommentGuardInfo, 'eventAt' | 'linkedAt'>,
+  write: () => Promise<void>,
+): Promise<void> {
+  if (isNews(info)) await write();
 }
 
 // The mapped user, when they are a member of the project's org; else the integration user
@@ -368,21 +379,29 @@ export async function fireGithubTriggers(outcome: GithubEventOutcome): Promise<v
           });
           // An issue that moved to another project is no business of this repository's project
           if (!issue || issue.projectId !== outcome.projectId) continue;
+          // The PR this issue is linked to, when several open PRs share the head
+          const own = outcome.pullRequestIdByIssue?.[issueId];
+          const forIssue =
+            own && own !== outcome.pullRequestId
+              ? await contextOf({ ...outcome, pullRequestId: own }, transition, common.repo)
+              : built;
+          if (!forIssue) continue;
           const info: CommentGuardInfo = {
             outcome,
             issueId,
             trigger,
-            eventAt: built.eventAt,
+            eventAt: forIssue.eventAt,
             linkedAt: common.repo.createdAt,
-            subjectKey: built.subjectKey,
-            headSha: built.headSha,
+            subjectKey: forIssue.subjectKey,
+            headSha: forIssue.headSha,
           };
           await evaluateRules(outcome.projectId, trigger, {
             issue: issue as unknown as AutomationContext['issue'],
             actorId: common.actorId,
             automationDepth: 0,
-            github: built.github,
+            github: forIssue.github,
             commentGuard: (write) => guardedComment(info, write),
+            outboundGuard: (write) => guardedOutbound(info, write),
           });
         } catch (err) {
           fail(err, { trigger, issueId });

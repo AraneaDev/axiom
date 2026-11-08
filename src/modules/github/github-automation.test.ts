@@ -529,6 +529,55 @@ describe('comments by age of the event', () => {
     expect(await comments(issue1)).toHaveLength(0);
   });
 
+  describe.each([
+    [
+      'send_email',
+      (): AutomationAction[] => [
+        { type: 'send_email', to: 'dev@github.invalid', subject: 'PR {{github.pr.number}}' },
+      ],
+    ],
+    [
+      'webhook',
+      (): AutomationAction[] => [{ type: 'webhook', url: 'https://hooks.github.invalid/x' }],
+    ],
+    [
+      'create_issue',
+      (): AutomationAction[] => [
+        { type: 'create_issue', title: 'Follow up on {{github.pr.number}}' },
+      ],
+    ],
+  ])('%s by age of the event', (type, actions) => {
+    const effects = async () => {
+      if (type === 'send_email') return emailAdd.mock.calls.length;
+      if (type === 'webhook') return webhook.calls.length;
+      return prisma.issue.count({
+        where: { projectId: ctx.projectId, title: { startsWith: 'Follow up on' } },
+      });
+    };
+    let emailAdd: ReturnType<typeof vi.spyOn>;
+    beforeEach(async () => {
+      await prisma.issue.deleteMany({
+        where: { projectId: ctx.projectId, title: { startsWith: 'Follow up on' } },
+      });
+      webhook.calls.length = 0;
+      emailAdd = vi.spyOn(emailQueue, 'add').mockResolvedValue(undefined as never);
+      return () => vi.restoreAllMocks();
+    });
+
+    it('still moves the ticket of an event older than the link but does not act', async () => {
+      await rule('pr:opened', [{ type: 'set_status', columnId: doneColumn }, ...actions()]);
+      await prEvent('opened', pr(OLD));
+      expect(await columnOf(issue1)).toBe(doneColumn);
+      expect(await effects()).toBe(0);
+    });
+
+    it('acts for an event after the link', async () => {
+      await rule('pr:opened', actions());
+      await prEvent('opened', pr());
+      expect(await effects()).toBe(1);
+    });
+  });
+
   it('comments on a merge after the link of a PR opened before it', async () => {
     await rule('pr:merged', say('merged'));
     await prEvent('opened', pr(OLD));
@@ -771,6 +820,13 @@ describe('round 3', () => {
     expect(body).not.toMatch(/(^|[^\\])[![]/);
   });
 
+  it('keeps a character reference in a title literal (N2)', async () => {
+    await rule('pr:opened', [{ type: 'set_field', field: 'body', value: '{{github.pr.title}}' }]);
+    await prEvent('opened', pr({ title: 'Hi &#64;tim &amp; co' }));
+    const { body } = await prisma.issue.findUniqueOrThrow({ where: { id: issue1 } });
+    expect(body).toBe('Hi \\&\\#64;tim \\&amp; co');
+  });
+
   it('does not announce the review requests of an old merged PR first stored by a later webhook', async () => {
     await rule('pr:review_requested', say('asked'));
     await prEvent(
@@ -985,6 +1041,41 @@ describe('noise limits', () => {
     expect(await comments(issue1)).toHaveLength(1);
     const marks = await prisma.githubAutomationMark.findMany({ where: { issueId: issue1 } });
     expect(marks.map((m) => m.headSha)).toEqual([SHA_A]);
+  });
+
+  it('gives the one comment to the first rule in creation order (M1)', async () => {
+    const late = await rule('pr:opened', say('late'), 'late');
+    const early = await rule('pr:opened', say('early'), 'early');
+    await prisma.automationRule.update({
+      where: { id: early.id },
+      data: { createdAt: new Date('2026-01-01T00:00:00Z') },
+    });
+    await prisma.automationRule.update({
+      where: { id: late.id },
+      data: { createdAt: new Date('2026-02-01T00:00:00Z') },
+    });
+    await prEvent('opened', pr());
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['early']);
+  });
+
+  it('names the PR an issue is linked to when several open PRs share a head (M9)', async () => {
+    await rule('checks:failed', say('failed on {{github.pr.url}}'));
+    await prEvent('opened', pr({ number: 21, head: { ref: `${p}-1-x`, sha: SHA_A } }));
+    await prEvent(
+      'opened',
+      pr({
+        number: 22,
+        head: { ref: `${p}-2-x`, sha: SHA_A },
+        html_url: 'https://github.com/acme-labs/widget/pull/22',
+      }),
+    );
+    await checkEvent(run(7901, SHA_A));
+    const one = (await comments(issue1)).map((c) => c.body);
+    const two = (await comments(issue2)).map((c) => c.body);
+    expect(one).toHaveLength(1);
+    expect(one[0]).toContain('pull/21');
+    expect(two).toHaveLength(1);
+    expect(two[0]).toContain('pull/22');
   });
 
   it('comments once when the same outcome is fired twice', async () => {

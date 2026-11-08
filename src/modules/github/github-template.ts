@@ -2,7 +2,7 @@ import type { GithubTriggerContext } from './github-automation';
 
 const TITLE_MAX = 200;
 const NAME_MAX = 100;
-const MARKDOWN_SPECIAL = /[\\`*_{}[\]()#+\-.!|<>@^~:]/g;
+const MARKDOWN_SPECIAL = /[&\\`*_{}[\]()#+\-.!|<>@^~:]/g;
 
 /**
  * GitHub's text as literal Markdown text: one line, cut to length, every Markdown character

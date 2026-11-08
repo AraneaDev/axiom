@@ -448,6 +448,18 @@ export async function storeCheckRun(
     event: 'check_run',
     headSha: run.head_sha,
     pullRequestId: open[0]?.id,
+    // Two open PRs can share a head; an issue's comment names the PR it is linked to
+    pullRequestIdByIssue: Object.fromEntries(
+      links
+        .filter((l) => openIds.has(l.targetKey) && drivesAutomation(l.sources))
+        .sort(
+          (a, b) =>
+            open.findIndex((pr) => pr.id === a.targetKey) -
+            open.findIndex((pr) => pr.id === b.targetKey),
+        )
+        .reverse()
+        .map((l) => [l.issueId, l.targetKey] as const),
+    ),
     linkedIssueIds: [...new Set(links.map((l) => l.issueId))],
     drivingIssueIds: [
       ...new Set(

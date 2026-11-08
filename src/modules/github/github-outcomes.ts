@@ -23,6 +23,8 @@ export type GithubEventOutcome = {
   action: string | null;
   source: 'webhook' | 'reconcile' | 'action';
   pullRequestId?: string;
+  /** For an outcome of several open PRs on one head: the PR each driving issue is linked to */
+  pullRequestIdByIssue?: Record<string, string>;
   branchId?: string;
   headSha?: string;
   actor: GithubActor;

@@ -81,6 +81,11 @@ export interface AutomationContext {
    * or does not, and what it skips is the comment and nothing else
    */
   commentGuard?: (write: () => Promise<void>) => Promise<void>;
+  /**
+   * Given the write of a send_email, webhook or create_issue action instead of it running at
+   * once: the guard runs it, or does not. Moves and field changes never go through it.
+   */
+  outboundGuard?: (write: () => Promise<void>) => Promise<void>;
 }
 
 // Re-export so existing consumers importing from this file keep working
@@ -248,6 +253,8 @@ export async function evaluateRules(
 
   const rules = await prisma.automationRule.findMany({
     where: { projectId, trigger, enabled: true },
+    // The same order every time: the first rule in it gets a GitHub trigger's one comment
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
 
   for (const rule of rules) {
@@ -396,6 +403,8 @@ async function executeActions(
   if (!issue?.id) return;
 
   const { plain: templateCtx, markdown: markdownCtx } = await buildTemplateContext(context);
+  const outbound = (write: () => Promise<void>) =>
+    context.outboundGuard ? context.outboundGuard(write) : write();
 
   for (const action of actions) {
     try {
@@ -484,12 +493,14 @@ async function executeActions(
             const resolvedIssueBody = action.body
               ? resolveTemplate(action.body, markdownCtx)
               : undefined;
-            await issuesService.createIssue(
-              projectId,
-              context.actorId,
-              { title: resolvedTitle, body: resolvedIssueBody },
-              { skipAutomation: true },
-            );
+            await outbound(async () => {
+              await issuesService.createIssue(
+                projectId,
+                context.actorId,
+                { title: resolvedTitle, body: resolvedIssueBody },
+                { skipAutomation: true },
+              );
+            });
           }
           break;
         case 'send_email':
@@ -497,24 +508,29 @@ async function executeActions(
             const resolvedSubject = resolveTemplate(action.subject, templateCtx);
             const resolvedEmailBody = action.body ? resolveTemplate(action.body, templateCtx) : '';
             // Loaded here: the queue connects to Redis, and migrate makes rules without sending
-            const { emailQueue } = await import('../../email/queue');
-            await emailQueue.add('automation-email', {
-              to: action.to,
-              recipientName: action.to,
-              type: 'automation',
-              title: resolvedSubject,
-              body: resolvedEmailBody,
+            await outbound(async () => {
+              const { emailQueue } = await import('../../email/queue');
+              await emailQueue.add('automation-email', {
+                to: action.to as string,
+                recipientName: action.to as string,
+                type: 'automation',
+                title: resolvedSubject,
+                body: resolvedEmailBody,
+              });
             });
           }
           break;
         case 'webhook':
           if (action.url) {
-            await executeWebhook(
-              action.url,
-              action.data ?? templateCtx,
-              action.method ?? 'POST',
-              action.headers,
-            );
+            const url = action.url;
+            await outbound(async () => {
+              await executeWebhook(
+                url,
+                action.data ?? templateCtx,
+                action.method ?? 'POST',
+                action.headers,
+              );
+            });
           }
           break;
         default:
