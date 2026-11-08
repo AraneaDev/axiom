@@ -174,7 +174,20 @@ export interface GithubFake {
    * Forgotten by `reset`.
    */
   setCollaborators(fullName: string, logins: string[]): void;
-  /** Forgets recorded requests, `on` routes, job logs, repository lists, the comment counter and the refresh counter and delay; the rest (repository ids included) stays */
+  /**
+   * The issues a pull request of a repository closes, as GitHub's GraphQL
+   * `PullRequest.closingIssuesReferences` lists them: each by number and the database id of its
+   * repository. `POST /graphql` answers `repository(owner, name)` with its `databaseId` and every
+   * aliased `pullRequest(number: N)` with these (none when unset), for a credential that reaches
+   * the repository; otherwise `repository` is null with a NOT_FOUND error, as on GitHub.
+   * Forgotten by `reset`.
+   */
+  setClosingReferences(
+    fullName: string,
+    pull: number,
+    refs: Array<{ number: number; repoId: number }>,
+  ): void;
+  /** Forgets recorded requests, `on` routes, job logs, repository lists, closing references, the comment counter and the refresh counter and delay; the rest (repository ids included) stays */
   reset(): void;
   close(): Promise<void>;
 }
@@ -326,6 +339,7 @@ class GithubFakeServer implements GithubFake {
   private commentIds = 0;
   private workflowRuns = new Map<string, Set<number>>();
   private collaborators = new Map<string, Set<string>>();
+  private closingRefs = new Map<string, Array<{ number: number; repoId: number }>>();
 
   constructor(private readonly scenario: string) {}
 
@@ -523,7 +537,16 @@ class GithubFakeServer implements GithubFake {
     this.collaborators.set(repoKey(fullName), new Set(logins));
   }
 
+  setClosingReferences(
+    fullName: string,
+    pull: number,
+    refs: Array<{ number: number; repoId: number }>,
+  ): void {
+    this.closingRefs.set(`${repoKey(fullName)}#${pull}`, refs);
+  }
+
   reset(): void {
+    this.closingRefs.clear();
     this.workflowRuns.clear();
     this.collaborators.clear();
     this.requests.length = 0;
@@ -696,6 +719,8 @@ class GithubFakeServer implements GithubFake {
     if (override) return override;
     const search = this.searchAnswer(req);
     if (search) return search;
+    const graphql = this.graphqlAnswer(req, credential);
+    if (graphql) return graphql;
     const jobLog = this.jobLogAnswer(req, credential);
     if (jobLog) return jobLog;
     const listed = this.repoListAnswer(req);
@@ -1468,6 +1493,56 @@ class GithubFakeServer implements GithubFake {
       (item) => !item.pull_request && (state === undefined || item.state === state),
     ).length;
     return { status: 200, body: { total_count: total, incomplete_results: false, items: [] } };
+  }
+
+  /**
+   * `POST /graphql` for `repository(owner: $owner, name: $name)` with aliased
+   * `pullRequest(number: N)` fields: the repository's `databaseId` and the closing references of
+   * {@link setClosingReferences}. A credential that does not reach the repository gets
+   * `repository: null` and a NOT_FOUND error, with status 200, as GitHub answers. Null for any
+   * other request.
+   * @param req The recorded request
+   * @param credential Who the request authenticated as
+   */
+  private graphqlAnswer(req: RecordedRequest, credential: Credential): FakeReply | null {
+    if (req.method !== 'POST' || req.path !== '/graphql') return null;
+    if (credential.kind === 'none') return REQUIRES_AUTH;
+    const { query = '', variables = {} } = (req.body ?? {}) as {
+      query?: string;
+      variables?: { owner?: string; name?: string };
+    };
+    const fullName = `${variables.owner ?? ''}/${variables.name ?? ''}`;
+    const refused = this.refusal('GET', `/repos/${fullName}`, credential);
+    const repoId = this.repoIds.get(repoKey(fullName));
+    if (refused || repoId === undefined) {
+      return {
+        status: 200,
+        body: {
+          data: { repository: null },
+          errors: [
+            {
+              type: 'NOT_FOUND',
+              path: ['repository'],
+              message: `Could not resolve to a Repository with the name '${fullName}'.`,
+            },
+          ],
+        },
+      };
+    }
+    const repository: Record<string, unknown> = { databaseId: repoId };
+    for (const [, alias, number] of query.matchAll(/(\w+)\s*:\s*pullRequest\(number:\s*(\d+)\)/g)) {
+      const refs = this.closingRefs.get(`${repoKey(fullName)}#${number}`) ?? [];
+      repository[alias] = {
+        closingIssuesReferences: {
+          totalCount: refs.length,
+          nodes: refs.slice(0, 25).map((ref) => ({
+            number: ref.number,
+            repository: { databaseId: ref.repoId },
+          })),
+        },
+      };
+    }
+    return { status: 200, body: { data: { repository } } };
   }
 
   // The fixtures only: the `on` routes were asked in builtIn

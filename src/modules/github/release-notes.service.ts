@@ -1,5 +1,5 @@
 // Release notes: on request, for a tag, the pull requests merged since the previous tag and the
-// tickets linked to them, written to a wiki page and to the body of the GitHub Release, as the
+// tickets linked to them or imported from the GitHub Issues they close, written to a wiki page and to the body of the GitHub Release, as the
 // person who asked. Everything that can refuse does so before the first write, and every check
 // that Axiom can make itself runs before the first GitHub call.
 import { createHash } from 'node:crypto';
@@ -19,17 +19,21 @@ import { createPage } from '../wiki/wiki.service';
 
 import { refPath, userAuth } from './github-actions.helpers';
 import { instanceOrigin } from './github-app.service';
-import { githubPaginate, githubRequest, type GithubAuth } from './github-client';
+import { githubGraphql, githubPaginate, githubRequest, type GithubAuth } from './github-client';
 import { findRepoLinkByProject } from './repo-link.service';
 
 /** How the first line of a body Axiom wrote starts: the marker, which carries a hash of the rest */
 export const RELEASE_MARKER_PREFIX = '<!-- axiom:release-notes';
 const MARKER_LINE = /^<!-- axiom:release-notes sha256=([0-9a-f]{64}) -->\r?\n/;
 const INCOMPLETE =
-  'These notes may be incomplete: GitHub listed only part of the commits between the two tags, or not every commit could be checked for its pull request.';
+  'These notes may be incomplete: GitHub listed only part of the commits between the two tags, or not every commit could be checked for its pull request and every pull request for the issues it closes.';
 
 const COMPARE_PAGES = 10;
-const MAX_COMMIT_LOOKUPS = 100;
+/** The most GitHub calls the commit lookups and the closing references make together */
+const MAX_LOOKUPS = 100;
+/** Pull requests per GraphQL call for their closing references, and references read per PR */
+const CLOSING_BATCH = 50;
+const CLOSING_FIRST = 25;
 const TITLE_MAX = 200;
 const NAME_MAX = 100;
 const SLUG_MAX = 50;
@@ -48,8 +52,9 @@ export type ReleaseNotesResult = {
   pullRequests: number;
   tickets: number;
   /**
-   * Whether the notes may miss pull requests: GitHub listed only part of the compared commits, or
-   * Axiom's lookup cap stopped before every commit was checked for its pull request
+   * Whether the notes may miss pull requests or tickets: GitHub listed only part of the compared
+   * commits, Axiom's lookup cap stopped before every commit was checked for its pull request and
+   * every pull request for the issues it closes, or GitHub did not answer for those
    */
   truncated: boolean;
   /** Whether the Release written is a draft, a person's, which Axiom left a draft */
@@ -79,6 +84,27 @@ const pullReply = z.looseObject({
   user: z.looseObject({ login: z.string() }).nullable().optional(),
   base: z.looseObject({ ref: z.string() }).optional(),
 });
+
+const closingReply = z
+  .looseObject({
+    closingIssuesReferences: z
+      .looseObject({
+        totalCount: z.number().optional(),
+        nodes: z.array(
+          z
+            .looseObject({
+              number: z.number(),
+              repository: z.looseObject({ databaseId: z.number().nullable() }).nullable(),
+            })
+            .nullable(),
+        ),
+      })
+      .nullable()
+      .optional(),
+  })
+  .nullable()
+  .optional();
+const closingRepository = z.looseObject({ databaseId: z.number().nullable() });
 
 /** A pull request of the notes, with the ids of its stored row when Axiom has one */
 interface NotePull {
@@ -411,7 +437,7 @@ async function pullsOfCommits(
   link: GithubRepoLink,
   commits: Commit[],
   complete: boolean,
-): Promise<{ pulls: NotePull[]; truncated: boolean }> {
+): Promise<{ pulls: NotePull[]; truncated: boolean; calls: number }> {
   const shas = [...new Set(commits.map((c) => c.sha))];
   const bySha = new Map(commits.map((c) => [c.sha, c]));
   const onMainline = complete ? mainline(commits) : null;
@@ -450,7 +476,7 @@ async function pullsOfCommits(
   // The list grows while it is read: the branch of a merge commit that maps to no pull request
   for (let next = 0; next < unmatched.length; next++) {
     const sha = unmatched[next];
-    if (calls >= MAX_COMMIT_LOOKUPS) {
+    if (calls >= MAX_LOOKUPS) {
       truncated = true;
       logger.info(
         'release notes looked up the pull requests of the first 100 unmatched commits only',
@@ -507,28 +533,152 @@ async function pullsOfCommits(
       if (pr) pr.storedId = row.id;
     }
   }
-  return { pulls: [...pulls.values(), ...found.values()], truncated };
+  return { pulls: [...pulls.values(), ...found.values()], truncated, calls };
 }
 
 /**
- * The tickets linked to the pull requests through any source, and the keys of each pull request.
+ * Whether a GitHub database id is the id of the linked repository.
+ * @param databaseId The id GitHub gave
+ * @param link The repository link
+ */
+const isLinkedRepo = (databaseId: number | null | undefined, link: GithubRepoLink) =>
+  typeof databaseId === 'number' &&
+  Number.isSafeInteger(databaseId) &&
+  BigInt(databaseId) === link.repoId;
+
+/**
+ * The GitHub Issues of the linked repository that the pull requests close, as GitHub's own
+ * closing references give them (GraphQL `closingIssuesReferences`), never read from PR bodies:
+ * one call as the caller per 50 pull requests, inside what is left of the lookup cap. GraphQL
+ * names the repository by owner and name, so the answer counts only when its `databaseId` is the
+ * link's. A reference to another repository is left out.
+ * @param auth The caller's credential
+ * @param link The repository link
+ * @param pulls The pull requests of the notes
+ * @param budget The calls the lookup cap leaves
+ * @returns The issue numbers each pull request closes, and whether some could not be read
+ */
+async function closingIssuesOf(
+  auth: GithubAuth,
+  link: GithubRepoLink,
+  pulls: NotePull[],
+  budget: number,
+): Promise<{ closing: Map<number, number[]>; truncated: boolean }> {
+  const numbers = [...new Set(pulls.map((pr) => pr.number))]
+    .filter((n) => Number.isSafeInteger(n) && n > 0)
+    .sort((a, b) => a - b);
+  const closing = new Map<number, number[]>();
+  let truncated = false;
+  for (let start = 0; start < numbers.length; start += CLOSING_BATCH) {
+    if (budget <= 0) {
+      truncated = true;
+      logger.info('release notes ran out of lookups before every closing reference was read', {
+        repoLinkId: link.id,
+        skipped: numbers.length - start,
+      });
+      break;
+    }
+    budget--;
+    const batch = numbers.slice(start, start + CLOSING_BATCH);
+    const fields = batch
+      .map(
+        (n) =>
+          `pr${n}: pullRequest(number: ${n}) { closingIssuesReferences(first: ${CLOSING_FIRST}) { totalCount nodes { number repository { databaseId } } } }`,
+      )
+      .join(' ');
+    const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { databaseId ${fields} } }`;
+    let reply: { data: unknown; errors: unknown[] };
+    try {
+      reply = await githubGraphql<unknown>(auth, query, { owner: link.owner, name: link.name });
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      truncated = true;
+      logger.info('release notes could not read the closing references', {
+        repoLinkId: link.id,
+        code: err.code,
+      });
+      break;
+    }
+    if (reply.errors.length) truncated = true;
+    const repository = (reply.data as { repository?: unknown } | null)?.repository;
+    const repo = closingRepository.safeParse(repository);
+    if (!repo.success || !isLinkedRepo(repo.data.databaseId, link)) {
+      truncated = true;
+      continue;
+    }
+    const answer = repository as Record<string, unknown>;
+    for (const number of batch) {
+      const parsed = closingReply.safeParse(answer[`pr${number}`]);
+      const refs = parsed.success ? parsed.data?.closingIssuesReferences : null;
+      if (!refs) {
+        truncated = true;
+        continue;
+      }
+      if ((refs.totalCount ?? 0) > refs.nodes.length) truncated = true;
+      const issues = refs.nodes.flatMap((node) =>
+        node && isLinkedRepo(node.repository?.databaseId, link) ? [node.number] : [],
+      );
+      if (issues.length) closing.set(number, issues);
+    }
+  }
+  return { closing, truncated };
+}
+
+/**
+ * The tickets of the pull requests: those linked to them through any source, and those imported
+ * from the GitHub Issues they close (an import row of this project for that issue number of the
+ * linked repository, with a live issue: a tombstone counts for nothing). Each ticket once, with
+ * the keys of each pull request by its number.
  * @param link The repository link
  * @param pulls The pull requests
+ * @param closing The issue numbers of the linked repository each pull request closes
  */
 async function ticketsOf(
   link: GithubRepoLink,
   pulls: NotePull[],
-): Promise<{ tickets: NoteTicket[]; keysByPull: Map<string, string[]> }> {
-  const ids = pulls.flatMap((pr) => (pr.storedId ? [pr.storedId] : []));
-  const links = ids.length
+  closing: Map<number, number[]>,
+): Promise<{ tickets: NoteTicket[]; keysByPull: Map<number, string[]> }> {
+  const numberByStored = new Map(
+    pulls.flatMap((pr) => (pr.storedId ? [[pr.storedId, pr.number] as const] : [])),
+  );
+  const links = numberByStored.size
     ? await prisma.githubIssueLink.findMany({
-        where: { repoLinkId: link.id, targetType: 'PULL_REQUEST', targetKey: { in: ids } },
+        where: {
+          repoLinkId: link.id,
+          targetType: 'PULL_REQUEST',
+          targetKey: { in: [...numberByStored.keys()] },
+        },
         select: { issueId: true, targetKey: true },
       })
     : [];
-  const issues = links.length
+  const closed = [...new Set([...closing.values()].flat())];
+  const imports = closed.length
+    ? await prisma.githubIssueImport.findMany({
+        where: {
+          projectId: link.projectId,
+          repoId: link.repoId,
+          githubIssueNumber: { in: closed },
+          issueId: { not: null },
+        },
+        select: { githubIssueNumber: true, issueId: true },
+      })
+    : [];
+  const importedIssue = new Map(imports.map((row) => [row.githubIssueNumber, row.issueId]));
+  const pairs: Array<{ pull: number; issueId: string }> = [
+    ...links.flatMap((l) => {
+      const pull = numberByStored.get(l.targetKey);
+      return pull === undefined ? [] : [{ pull, issueId: l.issueId }];
+    }),
+    ...[...closing].flatMap(([pull, numbers]) =>
+      numbers.flatMap((n) => {
+        const issueId = importedIssue.get(n);
+        return issueId ? [{ pull, issueId }] : [];
+      }),
+    ),
+  ];
+  const issues = pairs.length
     ? await prisma.issue.findMany({
-        where: { id: { in: [...new Set(links.map((l) => l.issueId))] }, projectId: link.projectId },
+        where: { id: { in: [...new Set(pairs.map((l) => l.issueId))] }, projectId: link.projectId },
         select: {
           id: true,
           number: true,
@@ -549,17 +699,17 @@ async function ticketsOf(
       },
     ]),
   );
-  const ticketsByPull = new Map<string, Map<number, NoteTicket>>();
-  for (const l of links) {
-    const ticket = byId.get(l.issueId);
+  const ticketsByPull = new Map<number, Map<number, NoteTicket>>();
+  for (const { pull, issueId } of pairs) {
+    const ticket = byId.get(issueId);
     if (!ticket) continue;
-    const tickets = ticketsByPull.get(l.targetKey) ?? new Map<number, NoteTicket>();
+    const tickets = ticketsByPull.get(pull) ?? new Map<number, NoteTicket>();
     tickets.set(ticket.number, ticket);
-    ticketsByPull.set(l.targetKey, tickets);
+    ticketsByPull.set(pull, tickets);
   }
   const keysByPull = new Map(
-    [...ticketsByPull].map(([pullId, tickets]) => [
-      pullId,
+    [...ticketsByPull].map(([pull, tickets]) => [
+      pull,
       [...tickets.values()].sort((a, b) => a.number - b.number).map((t) => t.key),
     ]),
   );
@@ -571,7 +721,7 @@ async function ticketsOf(
  * The order is the refusal order. First what Axiom decides alone: the space (of the project's
  * team, editable), the page (editable, Axiom's unless replaceBody) and the GitHub connection.
  * Then GitHub, read only: push rights on the repository, the tag, a Release body a person wrote
- * or edited, the previous tag and the commits between. Only then the page and the Release are
+ * or edited, the previous tag, the commits between and the issues their pull requests close. Only then the page and the Release are
  * written. Tickets get no activity and no automation runs (R16).
  * @param ctx Who asks; the action has checked issue edit on the project and edit on a named space
  * @param input What to write
@@ -678,12 +828,10 @@ export async function writeReleaseNotes(
   }
 
   const found = await pullsOfCommits(auth, repo, link, commits, compared.complete);
-  const truncated = !compared.complete || found.truncated;
-  const { tickets, keysByPull } = await ticketsOf(link, found.pulls);
-  const withKeys = found.pulls.map((pr) => ({
-    ...pr,
-    keys: (pr.storedId && keysByPull.get(pr.storedId)) || [],
-  }));
+  const closes = await closingIssuesOf(auth, link, found.pulls, MAX_LOOKUPS - found.calls);
+  const truncated = !compared.complete || found.truncated || closes.truncated;
+  const { tickets, keysByPull } = await ticketsOf(link, found.pulls, closes.closing);
+  const withKeys = found.pulls.map((pr) => ({ ...pr, keys: keysByPull.get(pr.number) ?? [] }));
 
   const wikiBody = releaseMarkdown(tag, withKeys, tickets, 'wiki', truncated);
   const written = page.id

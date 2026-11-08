@@ -440,6 +440,49 @@ export async function githubRequest<T>(
 }
 
 /**
+ * The GraphQL endpoint on the API host: `/graphql` beside the REST root, so `api.github.com`
+ * gives `/graphql` and an Enterprise Server's `/api/v3` gives `/api/graphql`.
+ */
+function graphqlUrl(): URL {
+  const base = new URL(apiBase());
+  const root = base.pathname.replace(/\/+$/, '').replace(/\/v3$/, '');
+  const url = new URL(`${root}/graphql`, base.origin);
+  if (url.origin !== apiOrigin()) throw new Error('A GitHub path must stay on the API host');
+  return url;
+}
+
+/**
+ * One GitHub GraphQL query, POSTed to the API host with the same credentials, host checks and
+ * call counting as a REST call. GitHub answers most refusals of a query with 200 and an
+ * `errors` list beside whatever `data` it could give: both are returned, and the caller decides.
+ * A status that is not 2xx throws as a REST call does.
+ * @param auth Who the call is made as
+ * @param query The GraphQL query
+ * @param variables Its variables
+ * @param opts Timeout (default 10 s)
+ * @param opts.timeoutMs
+ */
+export async function githubGraphql<T>(
+  auth: GithubAuth,
+  query: string,
+  variables: Record<string, unknown>,
+  opts: { timeoutMs?: number } = {},
+): Promise<{ data: T | null; errors: unknown[] }> {
+  const { data } = await request<unknown>(auth, 'POST', graphqlUrl(), {
+    body: { query, variables },
+    timeoutMs: opts.timeoutMs,
+  });
+  const answer = (data !== null && typeof data === 'object' ? data : {}) as {
+    data?: unknown;
+    errors?: unknown;
+  };
+  return {
+    data: (answer.data ?? null) as T | null,
+    errors: Array.isArray(answer.errors) ? answer.errors : [],
+  };
+}
+
+/**
  * The `rel="next"` target of a Link header
  * @param link
  */

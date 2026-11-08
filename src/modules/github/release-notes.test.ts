@@ -42,6 +42,9 @@ let linkId: string;
 let raw: string;
 let rawGithubOnly: string;
 const issueIds: string[] = [];
+/** Ticket 5 of the project, imported from GitHub Issue #12 of the widget repository */
+let importedIssueId: string;
+let siblingProjectId: string;
 
 /** The Releases on the fake by tag, as GitHub keeps them */
 let releases: Map<string, { id: number; tag_name: string; body: string; created_at: string }>;
@@ -207,6 +210,53 @@ beforeAll(async () => {
     });
     issueIds.push(issue.id);
   }
+  const importRow = (projectId: string, githubIssueNumber: number, issueId: string | null) => ({
+    projectId,
+    repoId: BigInt(REPO_ID),
+    githubIssueNumber,
+    githubIssueId: String(8_800_000 + githubIssueNumber),
+    issueId,
+    mirroredTitle: 't',
+    mirroredBodyHash: 'h',
+    mirroredLabels: [],
+    githubUpdatedAt: new Date('2026-10-01T00:00:00Z'),
+    lastImportedAt: new Date('2026-10-01T00:00:00Z'),
+  });
+  importedIssueId = (
+    await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 5,
+        title: 'Crash when saving a draft',
+        body: '',
+        creatorId: ctx.owner.id,
+        columnId: column('Done'),
+      },
+    })
+  ).id;
+  // Another project of the team, which imported GitHub Issue #14 of the same repository
+  siblingProjectId = (
+    await prisma.project.create({
+      data: { teamId: ctx.teamId, name: 'Sibling', slug: 'sibling-ghrn', prefix: 'SIBRN' },
+    })
+  ).id;
+  const siblingIssue = await prisma.issue.create({
+    data: {
+      projectId: siblingProjectId,
+      number: 1,
+      title: 'Imported elsewhere',
+      body: '',
+      creatorId: ctx.owner.id,
+    },
+  });
+  await prisma.githubIssueImport.createMany({
+    data: [
+      importRow(ctx.projectId, 12, importedIssueId),
+      // Ticket 1, linked to #7 by its title, is also GitHub Issue #15
+      importRow(ctx.projectId, 15, issueIds[0]),
+      importRow(siblingProjectId, 14, siblingIssue.id),
+    ],
+  });
 });
 
 /** The title of PR #9: every kind of text that could link, mention or render */
@@ -297,6 +347,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  await prisma.project.deleteMany({ where: { id: siblingProjectId } });
   await prisma.team.deleteMany({ where: { id: otherTeamId } });
   await cleanupTestContext(ctx);
   await prisma.user.deleteMany({ where: { id: { in: [member.id, viewer.id] } } });
@@ -318,14 +369,17 @@ describe('githubRelease.writeNotes', () => {
       new RegExp(`/${ctx.orgSlug}/${ctx.teamSlug}/wiki/releases-ghrn/release-v1-2-0$`),
     );
 
-    // Every call goes to the repository by id, as the user
+    // Every REST call goes to the repository by id, the one GraphQL call to /graphql, as the user
     expect(fake.requests.length).toBeGreaterThan(0);
     for (const req of fake.requests) {
       expect(
-        req.path === `/repositories/${REPO_ID}` || req.path.startsWith(`/repositories/${REPO_ID}/`),
+        req.path === `/repositories/${REPO_ID}` ||
+          req.path.startsWith(`/repositories/${REPO_ID}/`) ||
+          (req.method === 'POST' && req.path === '/graphql'),
       ).toBe(true);
       expect(req.headers.authorization).toMatch(/^user:/);
     }
+    expect(fake.requests.filter((r) => r.path === '/graphql')).toHaveLength(1);
     // The two commits no stored merge commit matched were looked up, the matched ones were not
     const lookups = fake.requests.filter((r) => r.path.endsWith('/pulls')).map((r) => r.path);
     expect(lookups.sort()).toEqual([
@@ -668,7 +722,7 @@ describe('githubRelease.writeNotes', () => {
     expect(fake.requests.filter((r) => r.path.endsWith('/pulls'))).toHaveLength(100);
     // Axiom's own lookup cap, not GitHub, cut these short: the closing line names that cause too
     const incomplete =
-      /These notes may be incomplete: GitHub listed only part of the commits between the two tags, or not every commit could be checked for its pull request\.$/;
+      /These notes may be incomplete: GitHub listed only part of the commits between the two tags, or not every commit could be checked for its pull request and every pull request for the issues it closes\.$/;
     expect(releases.get('v1.2.0')?.body.trimEnd().split('\n').at(-1)).toMatch(incomplete);
     expect((await notesPage())?.body.trimEnd().split('\n').at(-1)).toMatch(incomplete);
   });
@@ -874,6 +928,185 @@ describe('githubRelease.writeNotes', () => {
     expect(releases.get('v1.2.0')?.body).toContain(
       `- #7 \`Fix the login timeout\` by @octo-dev (${p()}-1, ${p()}-2)`,
     );
+  });
+
+  it('lists an imported GitHub Issue that a merged pull request closes, and adds its key to the PR line', async () => {
+    fake.setClosingReferences(WIDGET, 7, [
+      { number: 12, repoId: REPO_ID },
+      // Ticket 1 again, already linked to #7 by its title
+      { number: 15, repoId: REPO_ID },
+    ]);
+    fake.setClosingReferences(WIDGET, 9, [{ number: 12, repoId: REPO_ID }]);
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ pullRequests: 2, tickets: 4, truncated: false });
+
+    const body = releases.get('v1.2.0')?.body ?? '';
+    expect(body).toContain(
+      `- #7 \`Fix the login timeout\` by @octo-dev (${p()}-1, ${p()}-2, ${p()}-5)`,
+    );
+    expect(body).toContain(`by @review-bot (${p()}-2, ${p()}-3, ${p()}-5)`);
+    // Once, however many pull requests close it
+    expect(body.split('\n').filter((line) => line.startsWith(`- ${p()}-5 `))).toEqual([
+      `- ${p()}-5 \`Crash when saving a draft\` (Done)`,
+    ]);
+    expect(body.split('\n').filter((line) => line.startsWith(`- ${p()}-1 `))).toHaveLength(1);
+    expect((await notesPage())?.body).toContain(`- ${p()}-5 \`Crash when saving a draft\` (Done)`);
+
+    // One GraphQL call as the user, by the link's owner and name, for both pull requests, and
+    // no pull request body is asked for
+    const graphql = fake.requests.filter((r) => r.path === '/graphql');
+    expect(graphql).toHaveLength(1);
+    expect(graphql[0].method).toBe('POST');
+    expect(graphql[0].headers.authorization).toMatch(/^user:/);
+    const sent = graphql[0].body as { query: string; variables: Record<string, unknown> };
+    expect(sent.variables).toEqual({ owner: 'acme-labs', name: 'widget' });
+    expect(sent.query).toContain('pr7: pullRequest(number: 7)');
+    expect(sent.query).toContain('pr9: pullRequest(number: 9)');
+    expect(sent.query).toContain('closingIssuesReferences(first: 25)');
+    expect(sent.query).not.toMatch(/\bbody(Text|HTML)?\b/);
+  });
+
+  it('ignores a closing reference to an issue of another repository', async () => {
+    fake.setClosingReferences(WIDGET, 9, [{ number: 12, repoId: REPO_ID + 1 }]);
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ tickets: 3, truncated: false });
+    expect(releases.get('v1.2.0')?.body).not.toContain(`${p()}-5`);
+  });
+
+  it('ignores a deleted, tombstoned issue and an issue another project imported', async () => {
+    const deleted = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 6,
+        title: 'Deleted after the import',
+        body: '',
+        creatorId: ctx.owner.id,
+      },
+    });
+    const row = await prisma.githubIssueImport.create({
+      data: {
+        projectId: ctx.projectId,
+        repoId: BigInt(REPO_ID),
+        githubIssueNumber: 13,
+        githubIssueId: '8800013',
+        issueId: deleted.id,
+        mirroredTitle: 't',
+        mirroredBodyHash: 'h',
+        mirroredLabels: [],
+        githubUpdatedAt: new Date('2026-10-01T00:00:00Z'),
+        lastImportedAt: new Date('2026-10-01T00:00:00Z'),
+      },
+    });
+    try {
+      await prisma.issue.delete({ where: { id: deleted.id } });
+      expect(
+        (await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: row.id } })).issueId,
+      ).toBeNull();
+      fake.setClosingReferences(WIDGET, 7, [
+        { number: 13, repoId: REPO_ID },
+        { number: 14, repoId: REPO_ID },
+      ]);
+      const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ tickets: 3, truncated: false });
+      const body = releases.get('v1.2.0')?.body ?? '';
+      expect(body).toContain(`- #7 \`Fix the login timeout\` by @octo-dev (${p()}-1, ${p()}-2)\n`);
+      expect(body).not.toContain('SIBRN-');
+      expect(body).not.toContain(`${p()}-6`);
+    } finally {
+      await prisma.githubIssueImport.delete({ where: { id: row.id } });
+    }
+  });
+
+  it('reads no closing references once the lookup cap is spent, and says the notes are incomplete', async () => {
+    // #7's merge commit and exactly 100 commits to look up: the lookups end at the cap
+    const shas = Array.from({ length: 100 }, (_, i) => i.toString(16).padStart(40, 'e'));
+    fake.on('GET /repos/:owner/:repo/compare/:basehead', {
+      status: 200,
+      body: { commits: [{ sha: sha(1) }, ...shas.map((s) => ({ sha: s }))] },
+    });
+    fake.on('GET /repos/:owner/:repo/commits/:sha/pulls', { status: 200, body: [] });
+    fake.setClosingReferences(WIDGET, 7, [{ number: 12, repoId: REPO_ID }]);
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ pullRequests: 1, tickets: 2, truncated: true });
+    expect(fake.requests.filter((r) => r.path.endsWith('/pulls'))).toHaveLength(100);
+    expect(fake.requests.filter((r) => r.path === '/graphql')).toEqual([]);
+    const body = releases.get('v1.2.0')?.body ?? '';
+    expect(body).toContain(`- #7 \`Fix the login timeout\` by @octo-dev (${p()}-1, ${p()}-2)\n`);
+    expect(body.trimEnd().split('\n').at(-1)).toMatch(/^These notes may be incomplete/);
+  });
+
+  it('says the notes are incomplete when GitHub refuses the closing references', async () => {
+    fake.on('POST /graphql', { status: 502, body: { message: 'Server Error' } });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ pullRequests: 2, tickets: 3, truncated: true });
+    expect(releases.get('v1.2.0')?.body.trimEnd().split('\n').at(-1)).toMatch(
+      /^These notes may be incomplete/,
+    );
+  });
+
+  it("takes no closing reference from a repository whose id is not the link's", async () => {
+    // The stored owner and name now name another repository
+    fake.on('POST /graphql', {
+      status: 200,
+      body: {
+        data: {
+          repository: {
+            databaseId: REPO_ID + 1,
+            pr7: {
+              closingIssuesReferences: {
+                totalCount: 1,
+                nodes: [{ number: 12, repository: { databaseId: REPO_ID } }],
+              },
+            },
+          },
+        },
+      },
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ tickets: 3, truncated: true });
+    expect(releases.get('v1.2.0')?.body).not.toContain(`${p()}-5`);
+  });
+
+  it('asks for the closing references of up to 50 pull requests per call', async () => {
+    const merges = Array.from({ length: 60 }, (_, i) => (i + 1).toString(16).padStart(40, 'c'));
+    await prisma.githubPullRequest.createMany({
+      data: merges.map((merge, i) => ({
+        repoLinkId: linkId,
+        number: 100 + i,
+        title: `Change ${i}`,
+        state: 'MERGED' as const,
+        draft: false,
+        authorLogin: 'octo-dev',
+        headRef: `change-${i}`,
+        headSha: sha(9),
+        baseRef: 'main',
+        mergeCommitSha: merge,
+        requestedReviewers: [],
+        htmlUrl: `https://github.com/${WIDGET}/pull/${100 + i}`,
+        openedAt: new Date('2026-10-10T00:00:00Z'),
+        mergedAt: new Date('2026-10-20T00:00:00Z'),
+        githubUpdatedAt: new Date('2026-10-20T00:00:00Z'),
+      })),
+    });
+    fake.on('GET /repos/:owner/:repo/compare/:basehead', {
+      status: 200,
+      body: { commits: merges.map((merge) => ({ sha: merge })) },
+    });
+    fake.setClosingReferences(WIDGET, 159, [{ number: 12, repoId: REPO_ID }]);
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ pullRequests: 60, tickets: 1, truncated: false });
+    const asked = fake.requests
+      .filter((r) => r.path === '/graphql')
+      .map((r) => ((r.body as { query: string }).query.match(/: pullRequest\(/g) ?? []).length);
+    expect(asked).toEqual([50, 10]);
+    expect(releases.get('v1.2.0')?.body).toContain(`- #159 \`Change 59\` by @octo-dev (${p()}-5)`);
   });
 
   it('refuses a tag that is no valid ref name', async () => {

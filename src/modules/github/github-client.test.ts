@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger';
 
 import {
   countGithubCalls,
+  githubGraphql,
   githubPaginate,
   githubRequest,
   githubText,
@@ -414,6 +415,65 @@ describe('githubPaginate', () => {
 
     expect(complete).toBe(true);
     expect(items.map((r) => r.full_name)).toEqual(['acme-labs/widget', 'acme-labs/gadget']);
+  });
+});
+
+describe('githubGraphql', () => {
+  const QUERY =
+    'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { databaseId pr7: pullRequest(number: 7) { closingIssuesReferences(first: 25) { totalCount nodes { number repository { databaseId } } } } } }';
+
+  it('posts the query to the API host as the user and returns data and errors', async () => {
+    fake.setRepoId('acme-labs/widget', 7301);
+    fake.setClosingReferences('acme-labs/widget', 7, [{ number: 12, repoId: 7301 }]);
+
+    const { data, errors } = await githubGraphql({ kind: 'user', userId: 'u1' }, QUERY, {
+      owner: 'acme-labs',
+      name: 'widget',
+    });
+
+    expect(errors).toEqual([]);
+    expect(data).toEqual({
+      repository: {
+        databaseId: 7301,
+        pr7: {
+          closingIssuesReferences: {
+            totalCount: 1,
+            nodes: [{ number: 12, repository: { databaseId: 7301 } }],
+          },
+        },
+      },
+    });
+    const [sent] = fake.requests;
+    expect(sent).toMatchObject({ method: 'POST', path: '/graphql' });
+    expect(sent.headers.authorization).toMatch(/^user:ghu_/);
+    expect(sent.body).toEqual({ query: QUERY, variables: { owner: 'acme-labs', name: 'widget' } });
+  });
+
+  it("returns GitHub's errors beside the data of a 200 answer", async () => {
+    const { data, errors } = await githubGraphql({ kind: 'user', userId: 'u1' }, QUERY, {
+      owner: 'acme-labs',
+      name: 'gizmo',
+    });
+
+    expect(data).toEqual({ repository: null });
+    expect(errors).toHaveLength(1);
+  });
+
+  it('throws the REST errors for a refused call', async () => {
+    fake.on('POST /graphql', { status: 502, body: { message: 'Server Error' } });
+
+    const error = await thrown(githubGraphql({ kind: 'user', userId: 'u1' }, QUERY, {}));
+    expect(error.code).toBe('GITHUB_UNAVAILABLE');
+  });
+
+  it('posts to /api/graphql when the API base is an Enterprise Server one', async () => {
+    setGithubBaseUrls({ api: `${fake.url}/api/v3`, web: `${fake.url}/web` });
+    try {
+      await githubGraphql({ kind: 'user', userId: 'u1' }, QUERY, {}).catch(() => null);
+      expect(fake.requests.map((r) => `${r.method} ${r.path}`)).toEqual(['POST /api/graphql']);
+    } finally {
+      setGithubBaseUrls({ api: fake.url, web: `${fake.url}/web` });
+    }
   });
 });
 
