@@ -698,6 +698,8 @@ describe('fix round 4', () => {
       .map((r) => /\/issues\/(\d+)\/comments$/.exec(r.path)?.[1])
       .filter((n): n is string => n !== undefined)
       .map(Number);
+  const repoReads = () =>
+    fake.requests.filter((r) => r.method === 'GET' && r.path === `/repositories/${REPO_ID}`).length;
   // Old comments: older than the comments catch-up looks back, so only a read of the issue's own
   // comments finds them
   const oldComments = [
@@ -807,15 +809,58 @@ describe('fix round 4', () => {
   it('stops reading the comments of an issue GitHub no longer has', async () => {
     fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
     await backfill(131, new Date('2026-11-07T01:00:00Z'));
+    await backfill(132, new Date('2026-11-07T02:00:00Z'));
     fake.on('GET /repos/:owner/:repo/issues/:number/comments', {
       status: 404,
       body: { message: 'Not Found' },
     });
+    fake.requests.length = 0;
     await reconcileRepo(link.id);
     expect((await importOf(131))?.commentsImportedAt).not.toBeNull();
+    expect((await importOf(132))?.commentsImportedAt).not.toBeNull();
+    // The repository is asked once, on the first 404 of the round
+    expect(repoReads()).toBe(1);
     fake.requests.length = 0;
     await reconcileRepo(link.id);
     expect(commentReads()).toEqual([]);
+  });
+
+  it('marks nothing when the repository itself cannot be read: access was lost', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    await backfill(141, new Date('2026-11-07T01:00:00Z'));
+    await backfill(142, new Date('2026-11-07T02:00:00Z'));
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', {
+      status: 404,
+      body: { message: 'Not Found' },
+    });
+    fake.on('GET /repos/:owner/:repo', { status: 404, body: { message: 'Not Found' } });
+    fake.requests.length = 0;
+    await reconcileRepo(link.id);
+    expect((await importOf(141))?.commentsImportedAt).toBeNull();
+    expect((await importOf(142))?.commentsImportedAt).toBeNull();
+    // The pass stopped at the first row
+    expect(commentReads()).toEqual([141]);
+    expect((await linkRow()).lastReconcileNote).toMatch(/repository could not be read/);
+  });
+
+  it('moves a row that keeps failing to the back, so it holds no other back', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    const numbers = Array.from({ length: 11 }, (_, i) => 151 + i);
+    for (const number of numbers) {
+      await backfill(number, new Date(Date.parse('2026-11-07T00:00:00Z') + number * 60_000));
+    }
+    // The first ten answer something that is neither gone nor a GitHub limit
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', (_req, params) =>
+      Number(params.number) <= 160
+        ? { status: 422, body: { message: 'Validation Failed' } }
+        : { status: 200, body: [] },
+    );
+    await reconcileRepo(link.id);
+    expect((await importOf(161))?.commentsImportedAt).toBeNull();
+    fake.requests.length = 0;
+    await reconcileRepo(link.id);
+    expect(commentReads()[0]).toBe(161);
+    expect((await importOf(161))?.commentsImportedAt).not.toBeNull();
   });
 
   it.each([

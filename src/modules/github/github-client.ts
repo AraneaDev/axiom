@@ -466,9 +466,11 @@ export async function githubPaginate<T>(
   auth: GithubAuth,
   path: string,
   opts: { query?: Query; maxPages: number; itemsKey?: string },
-): Promise<{ items: T[]; complete: boolean }> {
+): Promise<{ items: T[]; complete: boolean; cut: boolean }> {
   const items: T[] = [];
   let url: URL | null = apiUrl(path, { ...opts.query, per_page: 100 });
+  // The call budget, not maxPages, ended the read
+  let cut = false;
 
   for (let page = 0; url && page < opts.maxPages; page++) {
     let reply: { data: unknown; headers: Headers };
@@ -476,7 +478,10 @@ export async function githubPaginate<T>(
       reply = await request<unknown>(auth, 'GET', url, {});
     } catch (err) {
       // A run that spent its requests keeps the pages it has
-      if (page > 0 && err instanceof AppError && err.code === GITHUB_CALL_LIMIT) break;
+      if (page > 0 && err instanceof AppError && err.code === GITHUB_CALL_LIMIT) {
+        cut = true;
+        break;
+      }
       throw err;
     }
     const { data, headers } = reply;
@@ -487,7 +492,7 @@ export async function githubPaginate<T>(
     // The next page carries the credential, so it has to be on the API host
     if (url && url.origin !== apiOrigin()) throw githubUnavailable('off-host');
   }
-  return { items, complete: url === null };
+  return { items, complete: url === null, cut };
 }
 
 /**

@@ -479,14 +479,12 @@ export async function importIssueComments(
   row: GithubIssueImport,
   opts: { live?: boolean } = {},
 ): Promise<CommentReadResult> {
-  const { items, complete } = await githubPaginate<GithubCommentPayload>(
+  // Three pages are all that is ever read: only a read the call budget stopped is unfinished
+  const { items, cut } = await githubPaginate<GithubCommentPayload>(
     installation(link),
     commentsPath(link, row.githubIssueNumber),
     { maxPages: COMMENT_PAGES },
   );
-  // Every page but the last one is full: fewer than all pages' worth with more to come means the
-  // budget stopped the read, while 3 full pages are all that is ever read
-  const cut = !complete && items.length < COMMENT_PAGES * 100;
   for (const comment of items) {
     try {
       await importComment(row, comment, { live: opts.live });

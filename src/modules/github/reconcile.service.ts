@@ -665,6 +665,9 @@ async function runReconcile(
     // again here, a few per round, within the budget, until a read gets through
     if (importing?.importIssues && left() > 0) {
       await phase('GitHub issue comments', async () => {
+        // A 404 may mean the installation lost the repository rather than that the issue is
+        // gone: the first one of the round is checked against the repository itself
+        let repoReadable = false;
         for (const row of await pendingCommentImports(repoLinkId, PENDING_COMMENT_READS)) {
           if (left() <= 0) return incomplete('The call budget ran out');
           await extendLease(repoLinkId, token);
@@ -673,13 +676,31 @@ async function runReconcile(
             read = await importIssueComments(importing, row, { live: true });
           } catch (err) {
             if (stopFor(err)) return;
-            // GitHub has no such issue (any more): there is nothing left to read
             if (isGone(err)) {
+              if (!repoReadable) {
+                if (left() <= 0) return incomplete('The call budget ran out');
+                try {
+                  await githubRequest<unknown>(auth, 'GET', `/repositories/${link.repoId}`);
+                } catch (repoErr) {
+                  if (stopFor(repoErr)) return;
+                  // Access was lost, not the issue: nothing is marked, the next round asks again
+                  return incomplete('The repository could not be read');
+                }
+                repoReadable = true;
+              }
+              // GitHub has no such issue (any more): there is nothing left to read
               await prisma.githubIssueImport.update({
                 where: { id: row.id },
                 data: { commentsImportedAt: new Date() },
               });
-            } else itemFailed('GitHub issue comment read', err);
+            } else {
+              itemFailed('GitHub issue comment read', err);
+              // To the back of the queue, so a row that keeps failing holds no other back
+              await prisma.githubIssueImport.update({
+                where: { id: row.id },
+                data: { lastImportedAt: new Date() },
+              });
+            }
             continue;
           }
           if (read === 'capped') return incomplete('The hourly import cap was reached');

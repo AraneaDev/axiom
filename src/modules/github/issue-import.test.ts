@@ -27,6 +27,7 @@ import {
   issueLockStats,
   importComment,
   importGithubIssue,
+  importIssueComments,
   postLinkComment,
   postPendingLinkComments,
   type GithubIssuePayload,
@@ -683,5 +684,31 @@ describe('fix round 4', () => {
       }),
     ).rejects.toBeDefined();
     expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(0);
+  });
+
+  it('takes three short pages that go on as a finished read, not as one the budget cut', async () => {
+    const result = await importGithubIssue(link, issue(), { withComments: false });
+    const row = await prisma.githubIssueImport.findUniqueOrThrow({
+      where: { issueId: result!.issueId },
+    });
+    // Short pages with a next page each time: GitHub could answer so, and only 3 pages are read
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', (req) => {
+      const page = Number(req.query.page ?? 1);
+      return {
+        status: 200,
+        body: Array.from({ length: 50 }, (_, i) => ({
+          id: 9700 + page * 100 + i,
+          body: `Page ${page}, comment ${i}`,
+          user: { login: 'outside-dev', id: 7002, type: 'User' },
+          created_at: '2026-11-07T11:00:00Z',
+          updated_at: '2026-11-07T11:00:00Z',
+        })),
+        headers: { link: `<${fake.url}${req.path}?per_page=100&page=${page + 1}>; rel="next"` },
+      };
+    });
+    expect(await importIssueComments(link, row)).toBe('complete');
+    expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(150);
+    const after = await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.commentsImportedAt).not.toBeNull();
   });
 });

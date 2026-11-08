@@ -9,6 +9,7 @@ import { useGithubFake } from '../../test/github-fake';
 import { logger } from '../../utils/logger';
 
 import {
+  countGithubCalls,
   githubPaginate,
   githubRequest,
   githubText,
@@ -385,6 +386,23 @@ describe('githubPaginate', () => {
     expect(complete).toBe(false);
     expect(items).toHaveLength(4);
     expect(fake.requests).toHaveLength(2);
+  });
+
+  it('tells a list the call budget cut from one that reached maxPages', async () => {
+    pagedIssues(5);
+    // The installation token is had first, so the budget below counts the pages only
+    await githubPaginate(INSTALLATION, '/repos/acme-labs/widget/issues', { maxPages: 1 });
+
+    const atMax = await githubPaginate(INSTALLATION, '/repos/acme-labs/widget/issues', {
+      maxPages: 2,
+    });
+    expect(atMax).toMatchObject({ complete: false, cut: false });
+
+    const budget = await countGithubCalls({ calls: 0, limit: 1 }, () =>
+      githubPaginate(INSTALLATION, '/repos/acme-labs/widget/issues', { maxPages: 3 }),
+    );
+    expect(budget.items).toHaveLength(2);
+    expect(budget).toMatchObject({ complete: false, cut: true });
   });
 
   it('reads the items from itemsKey for wrapped lists', async () => {
