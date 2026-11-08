@@ -1,0 +1,14 @@
+{
+  "route": "GET /repos/:owner/:repo/git/ref/tags/v1.2.0",
+  "status": 200,
+  "body": {
+    "ref": "refs/tags/v1.2.0",
+    "node_id": "REF_kwDOexampleTag",
+    "url": "https://api.github.com/repos/acme-labs/widget/git/refs/tags/v1.2.0",
+    "object": {
+      "sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "type": "commit",
+      "url": "https://api.github.com/repos/acme-labs/widget/git/commits/cccccccccccccccccccccccccccccccccccccccc"
+    }
+  }
+}

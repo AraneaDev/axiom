@@ -461,9 +461,11 @@ model WikiSpace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pages         Page[]
-  pageTemplates PageTemplate[]
-  permissions   SpacePermission[]
+  pages             Page[]
+  pageTemplates     PageTemplate[]
+  permissions       SpacePermission[]
+  /// The repository links that write their release notes here
+  releaseNotesLinks GithubRepoLink[]
 
   @@unique([teamId, slug])
   @@map("wiki_spaces")
@@ -1483,6 +1485,7 @@ model GithubRepoLink {
   importCommentsSeenAt  DateTime?
   /// The wiki space release notes are written to when a request names none (a space of the project's team)
   releaseNotesSpaceId   String?
+  releaseNotesSpace     WikiSpace?          @relation(fields: [releaseNotesSpaceId], references: [id], onDelete: SetNull)
   project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issueLinks            GithubIssueLink[]
   branches              GithubBranch[]

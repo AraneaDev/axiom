@@ -69,7 +69,11 @@ function textOf(token: Node): string {
   }
 }
 
-function visibleText(text: string): string {
+/**
+ * The text a reader sees of some Markdown: code, raw HTML, images and link addresses left out.
+ * @param text The Markdown
+ */
+export function visibleText(text: string): string {
   try {
     return visible(marked.lexer(text, { gfm: true }), '\n');
   } catch {

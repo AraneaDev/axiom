@@ -2,6 +2,8 @@
 // tickets linked to them, written to a wiki page and to the body of the GitHub Release, as the
 // person who asked. Everything that can refuse does so before the first write, and every check
 // that Axiom can make itself runs before the first GitHub call.
+import { createHash } from 'node:crypto';
+
 import type { GithubRepoLink } from '@prisma/client';
 import { z } from 'zod';
 
@@ -15,14 +17,16 @@ import { writePageBody } from '../wiki/page-writes';
 import { canEditPage } from '../wiki/wiki-permissions.service';
 import { createPage } from '../wiki/wiki.service';
 
-import { userAuth } from './github-actions.helpers';
+import { refPath, userAuth } from './github-actions.helpers';
 import { instanceOrigin } from './github-app.service';
 import { githubPaginate, githubRequest, type GithubAuth } from './github-client';
-import { literal } from './github-template';
 import { findRepoLinkByProject } from './repo-link.service';
 
-/** The first line of a Release body Axiom wrote: a body with it is Axiom's to rewrite */
-export const RELEASE_MARKER = '<!-- axiom:release-notes -->';
+/** How the first line of a body Axiom wrote starts: the marker, which carries a hash of the rest */
+export const RELEASE_MARKER_PREFIX = '<!-- axiom:release-notes';
+const MARKER_LINE = /^<!-- axiom:release-notes sha256=([0-9a-f]{64}) -->\r?\n/;
+const INCOMPLETE =
+  'These notes may be incomplete: GitHub listed only part of the commits or pull requests between the two tags.';
 
 const COMPARE_PAGES = 10;
 const MAX_COMMIT_LOOKUPS = 100;
@@ -43,6 +47,8 @@ export type ReleaseNotesResult = {
   releaseUrl: string;
   pullRequests: number;
   tickets: number;
+  /** Whether GitHub listed only part of the commits or pull requests */
+  truncated: boolean;
 };
 
 const releaseReply = z.looseObject({
@@ -102,6 +108,32 @@ export function codeSpan(text: string, max: number): string {
   return `${fence}${pad}${line}${pad}${fence}`;
 }
 
+/**
+ * The hash a marker carries: of the body below the marker line, line ends and trailing space
+ * aside, which GitHub's editor may change without anyone editing the text.
+ * @param rest The body below the marker line
+ */
+const bodyHash = (rest: string) =>
+  createHash('sha256').update(rest.replace(/\r\n/g, '\n').trimEnd()).digest('hex');
+
+/**
+ * A body under the marker line that carries its hash.
+ * @param rest The body below the marker line
+ */
+const withMarker = (rest: string) =>
+  `${RELEASE_MARKER_PREFIX} sha256=${bodyHash(rest)} -->\n${rest}`;
+
+/**
+ * Whether Axiom wrote this Release body and nobody changed it since: it starts with the marker
+ * and the hash in the marker is the hash of the rest. A person's edit below the marker leaves the
+ * marker in place (it is invisible) but breaks the hash.
+ * @param body A Release body
+ */
+export function writtenByAxiom(body: string): boolean {
+  const marker = MARKER_LINE.exec(body);
+  return marker !== null && marker[1] === bodyHash(body.slice(marker[0].length));
+}
+
 // A GitHub login: the mention GitHub makes of it is the credit the notes give
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 // A status of plain words reads as written; anything else is shown as code
@@ -111,29 +143,32 @@ const releaseLogin = (login: string) =>
   GITHUB_LOGIN.test(login) ? `@${login}` : codeSpan(login, NAME_MAX);
 const releaseStatus = (status: string) =>
   PLAIN_WORDS.test(status) ? status : codeSpan(status, NAME_MAX);
+// A tag of these characters reads as written; anything else (`@`, `#`) is shown as code
+const PLAIN_TAG = /^[A-Za-z0-9._/-]+$/;
+const tagHeading = (tag: string) => (PLAIN_TAG.test(tag) ? tag : codeSpan(tag, TITLE_MAX));
 
 /**
- * The notes as Markdown. The wiki page escapes every text that is not Axiom's own with the
- * Markdown literal, so it mentions no Axiom user and renders no link or image (R14). The Release
- * body keeps the `#<n>` and `@<login>` that credit the work and puts titles in code spans, so they
- * mention and cross-link nothing on GitHub (R15).
+ * The notes as Markdown, under the marker. Every text that is not Axiom's own goes in a code span,
+ * on the page as in the Release: a PR title or ticket title then renders as itself and links,
+ * mentions or cross-links nothing, on GitHub (R15) or in Axiom (R14), and a code span survives the
+ * editor's normalisation where backslash escapes do not. The Release keeps `#<n>` and `@<login>`,
+ * which credit the work on GitHub; the page shows the login as code, as Axiom has no such user.
  * @param tag The release tag
  * @param pulls The pull requests, with the keys of their tickets
  * @param tickets The tickets
  * @param target Where the text is rendered
+ * @param truncated Whether GitHub listed only part of the changes: the notes end saying so
  */
 export function releaseMarkdown(
   tag: string,
   pulls: Array<NotePull & { keys: string[] }>,
   tickets: NoteTicket[],
   target: 'wiki' | 'github',
+  truncated: boolean,
 ): string {
   const wiki = target === 'wiki';
-  const title = (text: string) =>
-    wiki ? literal(text, TITLE_MAX, true) : codeSpan(text, TITLE_MAX);
-  const login = (name: string) => (wiki ? literal(`@${name}`, NAME_MAX, true) : releaseLogin(name));
-  const status = (name: string) => (wiki ? literal(name, NAME_MAX, true) : releaseStatus(name));
-  const heading = wiki ? literal(tag, TITLE_MAX, true) : tag;
+  const title = (text: string) => codeSpan(text, TITLE_MAX);
+  const login = (name: string) => (wiki ? codeSpan(`@${name}`, NAME_MAX) : releaseLogin(name));
 
   const pullLines = [...pulls]
     .sort((a, b) => a.number - b.number)
@@ -143,22 +178,24 @@ export function releaseMarkdown(
     });
   const ticketLines = [...tickets]
     .sort((a, b) => a.number - b.number)
-    .map((t) => `- ${t.key} ${title(t.title)} (${status(t.status)})`);
+    .map((t) => `- ${t.key} ${title(t.title)} (${releaseStatus(t.status)})`);
 
-  return [
-    RELEASE_MARKER,
-    '',
-    `## ${heading}`,
-    '',
-    '### Pull requests',
-    '',
-    ...(pullLines.length ? pullLines : ['None']),
-    '',
-    '### Tickets',
-    '',
-    ...(ticketLines.length ? ticketLines : ['None']),
-    '',
-  ].join('\n');
+  return withMarker(
+    [
+      '',
+      `## ${tagHeading(tag)}`,
+      '',
+      '### Pull requests',
+      '',
+      ...(pullLines.length ? pullLines : ['None']),
+      '',
+      '### Tickets',
+      '',
+      ...(ticketLines.length ? ticketLines : ['None']),
+      '',
+      ...(truncated ? [INCOMPLETE, ''] : []),
+    ].join('\n'),
+  );
 }
 
 /**
@@ -174,18 +211,39 @@ async function notesSpace(
   link: GithubRepoLink,
   spaceId: string | undefined,
 ): Promise<string> {
-  if (spaceId) return spaceId;
-  if (!link.releaseNotesSpaceId) {
+  const chosen = spaceId ?? link.releaseNotesSpaceId;
+  if (!chosen) {
     throw new AppError(
       400,
       "Choose a space for release notes in the project's GitHub settings, or pass spaceId",
       'RELEASE_NOTES_SPACE_REQUIRED',
     );
   }
-  await spaceAccess<{ spaceId: string }>('EDIT', (i) => i.spaceId)(ctx, {
-    spaceId: link.releaseNotesSpaceId,
-  });
-  return link.releaseNotesSpaceId;
+  if (!spaceId) {
+    await spaceAccess<{ spaceId: string }>('EDIT', (i) => i.spaceId)(ctx, { spaceId: chosen });
+  }
+  await assertTeamSpace(link.projectId, chosen);
+  return chosen;
+}
+
+/**
+ * Release notes go to a wiki space of the project's own team, whoever chose it.
+ * @param projectId The project
+ * @param spaceId The space
+ * @throws {AppError} 400 RELEASE_NOTES_SPACE_INVALID
+ */
+async function assertTeamSpace(projectId: string, spaceId: string): Promise<void> {
+  const [space, project] = await Promise.all([
+    prisma.wikiSpace.findUnique({ where: { id: spaceId }, select: { teamId: true } }),
+    prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { teamId: true } }),
+  ]);
+  if (!space || space.teamId !== project.teamId) {
+    throw new AppError(
+      400,
+      "Release notes go to a wiki space of the project's own team",
+      'RELEASE_NOTES_SPACE_INVALID',
+    );
+  }
 }
 
 /**
@@ -195,24 +253,35 @@ async function notesSpace(
  * @param spaceId The space
  * @param title The page title
  * @param tag The release tag
- * @throws {AppError} 403 when the page exists and the caller may not edit it
+ * @param replaceBody Whether a page Axiom did not write may be replaced
+ * @throws {AppError} 403 when the page exists and the caller may not edit it, 409
+ *   RELEASE_PAGE_EXISTS when it does not start with the marker and replaceBody is not set
  */
 async function notesPage(
   ctx: ActionContext,
   spaceId: string,
   title: string,
   tag: string,
+  replaceBody: boolean,
 ): Promise<{ id: string; slug: string } | { id: null; slug: string }> {
   const existing = await prisma.page.findFirst({
     where: { spaceId, title },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, body: true },
   });
   if (existing) {
     if (!(await canEditPage(ctx.userId, existing.id))) {
       throw new AppError(403, 'You do not have permission to edit the release notes page');
     }
-    return existing;
+    // The page is versioned, so only its marker is asked for: an edit below it is in the history
+    if (!existing.body.startsWith(RELEASE_MARKER_PREFIX) && !replaceBody) {
+      throw new AppError(
+        409,
+        `The page "${title}" exists and Axiom did not write it. Pass replaceBody to replace it.`,
+        'RELEASE_PAGE_EXISTS',
+      );
+    }
+    return { id: existing.id, slug: existing.slug };
   }
   const base =
     `release-${tag.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
@@ -285,26 +354,39 @@ async function pullsOfCommits(
   repo: string,
   link: GithubRepoLink,
   shas: string[],
-): Promise<NotePull[]> {
+): Promise<{ pulls: NotePull[]; truncated: boolean }> {
   const stored = shas.length
     ? await prisma.githubPullRequest.findMany({
         where: { repoLinkId: link.id, state: 'MERGED', mergeCommitSha: { in: shas } },
-        select: { id: true, number: true, title: true, authorLogin: true, mergeCommitSha: true },
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          authorLogin: true,
+          mergeCommitSha: true,
+          baseRef: true,
+        },
       })
     : [];
+  // Merged into the default branch, as the lookup below keeps them; a commit of another one is
+  // still matched, as GitHub's answer for it would be refused the same way
   const pulls = new Map<number, NotePull>(
-    stored.map((pr) => [
-      pr.number,
-      { number: pr.number, title: pr.title, login: pr.authorLogin, storedId: pr.id },
-    ]),
+    stored
+      .filter((pr) => pr.baseRef === link.defaultBranch)
+      .map((pr) => [
+        pr.number,
+        { number: pr.number, title: pr.title, login: pr.authorLogin, storedId: pr.id },
+      ]),
   );
   const matched = new Set(stored.map((pr) => pr.mergeCommitSha));
   const unmatched = shas.filter((sha) => !matched.has(sha));
 
   const found = new Map<number, NotePull>();
   let calls = 0;
+  let truncated = false;
   for (const sha of unmatched) {
     if (calls >= MAX_COMMIT_LOOKUPS) {
+      truncated = true;
       logger.info(
         'release notes looked up the pull requests of the first 100 unmatched commits only',
         {
@@ -350,7 +432,7 @@ async function pullsOfCommits(
       if (pr) pr.storedId = row.id;
     }
   }
-  return [...pulls.values(), ...found.values()];
+  return { pulls: [...pulls.values(), ...found.values()], truncated };
 }
 
 /**
@@ -411,29 +493,47 @@ async function ticketsOf(
 
 /**
  * Writes the release notes of a tag to a wiki page and to the GitHub Release, as the caller.
- * The order is the refusal order: the space and the page, the GitHub connection, the Release body
- * a person wrote, the previous tag and the tag itself all refuse before anything is written.
- * Tickets get no activity and no automation runs (R16).
+ * The order is the refusal order. First what Axiom decides alone: the space (of the project's
+ * team, editable), the page (editable, Axiom's unless replaceBody) and the GitHub connection.
+ * Then GitHub, read only: push rights on the repository, the tag, a Release body a person wrote
+ * or edited, the previous tag and the commits between. Only then the page and the Release are
+ * written. Tickets get no activity and no automation runs (R16).
  * @param ctx Who asks; the action has checked issue edit on the project and edit on a named space
  * @param input What to write
- * @throws {AppError} 409 GITHUB_NOT_LINKED, 400 RELEASE_NOTES_SPACE_REQUIRED, 409
- *   GITHUB_NOT_CONNECTED, 409 GITHUB_RELEASE_BODY_EXISTS, 400 RELEASE_PREVIOUS_TAG_REQUIRED,
- *   404 GITHUB_TAG_NOT_FOUND
+ * @throws {AppError} 409 GITHUB_NOT_LINKED, 400 RELEASE_NOTES_SPACE_REQUIRED or
+ *   RELEASE_NOTES_SPACE_INVALID, 409 RELEASE_PAGE_EXISTS, 409 GITHUB_NOT_CONNECTED, 403
+ *   GITHUB_FORBIDDEN, 404 GITHUB_TAG_NOT_FOUND, 409 GITHUB_RELEASE_BODY_EXISTS, 400
+ *   RELEASE_PREVIOUS_TAG_REQUIRED, 400 RELEASE_NO_CHANGES
  */
 export async function writeReleaseNotes(
   ctx: ActionContext,
   input: ReleaseNotesInput,
 ): Promise<ReleaseNotesResult> {
   const { projectId, tag } = input;
+  const replaceBody = input.replaceBody === true;
   const link = await findRepoLinkByProject(projectId);
   if (!link) {
     throw new AppError(409, 'This project has no linked GitHub repository', 'GITHUB_NOT_LINKED');
   }
   const spaceId = await notesSpace(ctx, link, input.spaceId);
   const title = `Release ${tag}`;
-  const page = await notesPage(ctx, spaceId, title, tag);
+  const page = await notesPage(ctx, spaceId, title, tag, replaceBody);
   const { auth } = await userAuth(ctx);
   const repo = `/repositories/${link.repoId}`;
+
+  await assertCanPush(auth, repo, link);
+  const tagMissing = () =>
+    new AppError(
+      404,
+      `GitHub has no tag ${tag} in ${link.fullName}, or your connection cannot see it`,
+      'GITHUB_TAG_NOT_FOUND',
+    );
+  // The compare resolves any ref, and creating a Release for a name that is no tag makes one
+  await githubRequest<unknown>(auth, 'GET', `${repo}/git/ref/tags/${refPath(tag)}`).catch(
+    (err: unknown) => {
+      throw isNotFound(err) ? tagMissing() : err;
+    },
+  );
 
   const release = await githubRequest<unknown>(
     auth,
@@ -446,11 +546,11 @@ export async function writeReleaseNotes(
       throw err;
     },
   );
-  const body = release?.body?.trim() ?? '';
-  if (body && !body.includes(RELEASE_MARKER) && input.replaceBody !== true) {
+  const body = release?.body ?? '';
+  if (body.trim() && !writtenByAxiom(body) && !replaceBody) {
     throw new AppError(
       409,
-      `The GitHub release ${tag} has a body that Axiom did not write. Pass replaceBody to replace it.`,
+      `The GitHub release ${tag} has a body that Axiom did not write, or that was edited since. Pass replaceBody to replace it.`,
       'GITHUB_RELEASE_BODY_EXISTS',
     );
   }
@@ -478,15 +578,23 @@ export async function writeReleaseNotes(
       }),
     ),
   ];
+  if (!shas.length) {
+    throw new AppError(
+      400,
+      `There are no commits from ${previous} to ${tag}. Pass the tag of an earlier release as previousTag.`,
+      'RELEASE_NO_CHANGES',
+    );
+  }
 
-  const pulls = await pullsOfCommits(auth, repo, link, shas);
-  const { tickets, keysByPull } = await ticketsOf(link, pulls);
-  const withKeys = pulls.map((pr) => ({
+  const found = await pullsOfCommits(auth, repo, link, shas);
+  const truncated = !compared.complete || found.truncated;
+  const { tickets, keysByPull } = await ticketsOf(link, found.pulls);
+  const withKeys = found.pulls.map((pr) => ({
     ...pr,
     keys: (pr.storedId && keysByPull.get(pr.storedId)) || [],
   }));
 
-  const wikiBody = releaseMarkdown(tag, withKeys, tickets, 'wiki');
+  const wikiBody = releaseMarkdown(tag, withKeys, tickets, 'wiki', truncated);
   const written = page.id
     ? (
         await writePageBody({
@@ -500,7 +608,7 @@ export async function writeReleaseNotes(
       ).page
     : await createPage(spaceId, ctx.userId, { title, slug: page.slug, body: wikiBody });
 
-  const releaseBody = releaseMarkdown(tag, withKeys, tickets, 'github');
+  const releaseBody = releaseMarkdown(tag, withKeys, tickets, 'github', truncated);
   const saved = release
     ? await githubRequest<unknown>(auth, 'PATCH', `${repo}/releases/${release.id}`, {
         body: { body: releaseBody },
@@ -522,7 +630,31 @@ export async function writeReleaseNotes(
         : `${link.htmlUrl}/releases/tag/${tagPath(tag)}`,
     pullRequests: withKeys.length,
     tickets: tickets.length,
+    truncated,
   };
+}
+
+const repoPermissions = z.looseObject({
+  permissions: z.looseObject({ push: z.boolean().optional() }).optional(),
+});
+
+/**
+ * Whether the caller may write the repository's Releases, asked of GitHub before Axiom writes
+ * anything, so a reader without push rights gets no page version and no half-written notes.
+ * @param auth The caller's credential
+ * @param repo The repository's API path
+ * @param link The repository link
+ * @throws {AppError} 403 GITHUB_FORBIDDEN
+ */
+async function assertCanPush(auth: GithubAuth, repo: string, link: GithubRepoLink): Promise<void> {
+  const { data } = await githubRequest<unknown>(auth, 'GET', repo);
+  if (repoPermissions.safeParse(data).data?.permissions?.push !== true) {
+    throw new AppError(
+      403,
+      `Your GitHub account may not write releases of ${link.fullName}: it needs push access.`,
+      'GITHUB_FORBIDDEN',
+    );
+  }
 }
 
 /**
@@ -539,19 +671,7 @@ export async function setReleaseNotesSpace(
   if (!link) {
     throw new AppError(409, 'This project has no linked GitHub repository', 'GITHUB_NOT_LINKED');
   }
-  if (spaceId !== null) {
-    const [space, project] = await Promise.all([
-      prisma.wikiSpace.findUnique({ where: { id: spaceId }, select: { teamId: true } }),
-      prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { teamId: true } }),
-    ]);
-    if (!space || space.teamId !== project.teamId) {
-      throw new AppError(
-        400,
-        "Release notes go to a wiki space of the project's own team",
-        'RELEASE_NOTES_SPACE_INVALID',
-      );
-    }
-  }
+  if (spaceId !== null) await assertTeamSpace(projectId, spaceId);
   const updated = await prisma.githubRepoLink.update({
     where: { id: link.id },
     data: { releaseNotesSpaceId: spaceId },

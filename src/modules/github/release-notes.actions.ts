@@ -5,6 +5,8 @@ import type { ActionContext } from '../../actions/define';
 import { defineAction } from '../../actions/define';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
+import { AppError } from '../../middleware/errorHandler';
+import { scopeAllows } from '../../middleware/token-scopes';
 
 import { assertRefName } from './github-actions.helpers';
 import { writeReleaseNotes } from './release-notes.service';
@@ -39,12 +41,21 @@ const issueEdit = projectAction<NotesTarget>('issue:edit', (i) => i.projectId);
 const spaceEdit = spaceAccess<{ spaceId: string }>('EDIT', (i) => i.spaceId);
 
 /**
- * Issue edit on the project, then edit on the space the request names.
+ * Issue edit on the project, wiki:write for a token, then edit on the space the request names.
  * @param ctx Who asks
  * @param input The target
  */
 async function writeNotesAccess(ctx: ActionContext, input: NotesTarget): Promise<void> {
   await issueEdit(ctx, input);
+  // The notes are a wiki page as well: a token needs wiki:write beside the github:write of the
+  // area, checked here as attachments check the scope of their parent
+  if (ctx.scopes && !scopeAllows(ctx.scopes, 'wiki', 'write')) {
+    throw new AppError(
+      403,
+      'This API token needs the wiki:write scope as well to write release notes',
+      'SCOPE',
+    );
+  }
   if (input.spaceId !== undefined) await spaceEdit(ctx, { spaceId: input.spaceId });
 }
 
@@ -58,7 +69,8 @@ registerActions([
     summary:
       'Write the release notes of a tag (the pull requests merged since the previous tag and their ' +
       'tickets) to a wiki page and the body of the GitHub release, as your own GitHub account. A ' +
-      'release body Axiom did not write is only replaced with replaceBody.',
+      'release body or page Axiom did not write, or that was edited since, is only replaced with ' +
+      'replaceBody. A token needs wiki:write as well.',
     target: notesTarget,
     input: notesTarget.extend({
       tag: tagName.describe('The tag of the release, such as v1.2.0'),
@@ -75,6 +87,7 @@ registerActions([
       releaseUrl: z.string(),
       pullRequests: z.number(),
       tickets: z.number(),
+      truncated: z.boolean(),
     }),
     preview: (_ctx, { projectId, tag, replaceBody }) =>
       previews.githubReleaseNotes(projectId, tag, replaceBody === true),

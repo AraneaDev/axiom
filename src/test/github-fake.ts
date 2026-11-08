@@ -1266,8 +1266,8 @@ class GithubFakeServer implements GithubFake {
    */
   private repoForUser(fullName: string, req: RecordedRequest, credential: Credential): FakeReply {
     const found = this.fromRoutes(req);
-    // A token issued without `admin` gets the fixture as it is
-    if (!credential.admin) return found;
+    // A token issued without `admin` or `push` gets the fixture as it is
+    if (!credential.admin && !credential.push) return found;
     const body = found.body as
       | (Record<string, unknown> & { owner?: object; permissions?: object })
       | undefined;
@@ -1290,7 +1290,11 @@ class GithubFakeServer implements GithubFake {
         html_url: `https://github.com/${fullName}`,
         url: `https://api.github.com/repos/${fullName}`,
         owner: { ...body.owner, login: owner, html_url: `https://github.com/${owner}` },
-        permissions: { ...body.permissions, admin: isAdmin, maintain: isAdmin },
+        permissions: {
+          ...body.permissions,
+          ...(credential.admin && { admin: isAdmin, maintain: isAdmin }),
+          ...(credential.push && { push: credential.push.has(key) }),
+        },
       },
     };
   }

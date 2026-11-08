@@ -5,6 +5,7 @@ import { broadcastToRoom } from '../../realtime/broadcast';
 import { onBodySaved } from '../../realtime/yjs-persistence';
 import { ERR } from '../../utils/error-messages';
 import { formatIssueKey } from '../../utils/issue-key';
+import { visibleText } from '../../utils/mentions';
 import {
   PROJECT_URL_SELECT,
   SPACE_URL_SELECT,
@@ -16,11 +17,13 @@ import { viewableIssuesWhere, viewablePagesWhere } from '../search/search-access
 const ISSUE_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
 
 /**
- * The issue keys a page body names, whether or not they resolve to anything.
+ * The issue keys a page body names, whether or not they resolve to anything. Only text a reader
+ * sees names one: a key in code (or a link address, an image, raw HTML) is shown as written and
+ * links nothing, as the renderer shows it.
  * @param content - The page body
  */
 function issueKeysIn(content: string): Set<string> {
-  return new Set([...content.matchAll(ISSUE_KEY_RE)].map((match) => match[1]));
+  return new Set([...visibleText(content).matchAll(ISSUE_KEY_RE)].map((match) => match[1]));
 }
 
 /**
