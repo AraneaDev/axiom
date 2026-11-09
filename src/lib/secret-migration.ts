@@ -19,6 +19,7 @@ export const ENCRYPTED_COLUMNS: Array<{ model: string; field: string }> = [
   { model: 'githubApp', field: 'webhookSecret' },
   { model: 'githubAccount', field: 'accessToken' },
   { model: 'githubAccount', field: 'refreshToken' },
+  { model: 'botWebhook', field: 'secret' },
 ];
 
 const BATCH = 500;

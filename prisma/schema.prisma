@@ -207,10 +207,62 @@ model ServiceAccount {
   suspendedAt     DateTime?
   createdAt       DateTime                  @default(now())
 
-  owners ServiceAccountOwner[]
+  owners    ServiceAccountOwner[]
+  webhook   BotWebhook?
+  botEvents BotEvent[]
 
   @@index([orgId])
   @@map("service_accounts")
+}
+
+enum BotWebhookStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum BotEventStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  DROPPED
+}
+
+/// The one signed webhook a bot has: where its events are sent
+model BotWebhook {
+  id                  String           @id @default(cuid())
+  botId               String           @unique
+  bot                 ServiceAccount   @relation(fields: [botId], references: [userId], onDelete: Cascade)
+  url                 String
+  secret              String // enc
+  status              BotWebhookStatus @default(ACTIVE)
+  consecutiveFailures Int              @default(0)
+  pausedAt            DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@map("bot_webhooks")
+}
+
+/// An event queued for a bot's webhook, with the state of its delivery
+model BotEvent {
+  id             String         @id @default(cuid())
+  seq            BigInt         @default(autoincrement())
+  botId          String
+  bot            ServiceAccount @relation(fields: [botId], references: [userId], onDelete: Cascade)
+  type           String
+  payload        Json
+  status         BotEventStatus @default(PENDING)
+  attempts       Int            @default(0)
+  nextAttemptAt  DateTime       @default(now())
+  lastAttemptAt  DateTime?
+  lastStatusCode Int?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@index([botId, status, seq])
+  @@index([status, nextAttemptAt])
+  @@map("bot_events")
 }
 
 /// A person who answers for a bot: approves its requests and manages its tokens

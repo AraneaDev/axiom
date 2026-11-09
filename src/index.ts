@@ -44,6 +44,7 @@ import './modules/issues/issues.actions';
 import './modules/wiki/wiki.actions';
 import './modules/orgs/orgs.actions';
 import './modules/service-accounts/service-accounts.actions';
+import './modules/bot-events/bot-events.actions';
 import './modules/invitations/invitations.actions';
 import './modules/teams/teams.actions';
 import './modules/projects/projects.actions';
