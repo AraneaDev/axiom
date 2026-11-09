@@ -113,6 +113,31 @@ describe('AgentApprovals', () => {
     expect(within(cell).getByText('Triage bot')).toBeInTheDocument();
   });
 
+  it('I1: a request whose result is a secret is opened, never approved from the list', async () => {
+    list.mockResolvedValue({
+      data: [row({ id: 't1', action: 'token.create', preview: 'Create token ci' })],
+      total: 1,
+    });
+    show();
+    const link = await screen.findByRole('link', { name: 'Create token ci' });
+    const cell = link.closest('tr') as HTMLElement;
+    expect(within(cell).queryByRole('button', { name: /Approve/ })).toBeNull();
+    expect(within(cell).getByRole('link', { name: /Open/ })).toHaveAttribute(
+      'href',
+      '/approvals/agent/t1',
+    );
+  });
+
+  it('M2: a request decided elsewhere meanwhile is no error, the list is read again', async () => {
+    list.mockResolvedValue({ data: [row({})], total: 1 });
+    approve.mockRejectedValue(new ApiError(409, 'This request was already decided', 'CONFLICT'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /Approve/ }));
+    await waitFor(() => expect(approve).toHaveBeenCalled());
+    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(1));
+    expect(screen.queryByText(/already decided/)).toBeNull();
+  });
+
   it('says in plain words why a decision was refused', async () => {
     list.mockResolvedValue({ data: [row({})], total: 1 });
     approve.mockRejectedValue(new ApiError(403, 'ui only', 'UI_ONLY'));

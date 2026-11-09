@@ -207,6 +207,39 @@ describe('ServiceAccountDetail', () => {
     await waitFor(() => expect(api.setOwners).toHaveBeenCalledWith('bot-1', ['u-jan']));
   });
 
+  it('shows a request in a place the owner cannot open as text, never as a link', async () => {
+    api.get.mockResolvedValue(detail());
+    api.approvals.mockResolvedValue({
+      data: [
+        {
+          id: 'req-stub',
+          preview: 'A request in a place you cannot open',
+          restricted: true,
+          serviceAccount: { id: 'bot-1', displayName: 'Nightly Triage' },
+        },
+      ],
+      total: 1,
+    });
+    show();
+    expect(await screen.findByText("A request in a place you can't open")).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /place you/ })).toBeNull();
+  });
+
+  it('a change of owners reads again where the bot may be added', async () => {
+    api.get.mockResolvedValue(detail());
+    api.setOwners.mockResolvedValue(detail({ owners: [JAN] }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['service-account-joinable', 'bot-1'], { teams: [], spaces: [] });
+    show('ADMIN', undefined, client);
+    fireEvent.click(await screen.findByRole('button', { name: /Edit owners/ }));
+    fireEvent.click(await screen.findByLabelText(/Pim Voorbeeld/));
+    fireEvent.click(screen.getByRole('button', { name: /Save owners/ }));
+    await waitFor(() => expect(api.setOwners).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(client.getQueryState(['service-account-joinable', 'bot-1'])?.isInvalidated).toBe(true),
+    );
+  });
+
   it('Review Focus 4: OWNER_NEEDED shows its reason, and the owners stay as they were', async () => {
     api.get.mockResolvedValue(detail());
     api.setOwners.mockRejectedValue(
@@ -456,7 +489,9 @@ describe('ServiceAccountDetail', () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: /Add to space/ }));
     const dialog = await screen.findByRole('dialog');
-    expect(await within(dialog).findByText(/No space to add it to/)).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/a space one of this bot's owners can open/),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /^Add$/ })).toBeDisabled();
   });
 

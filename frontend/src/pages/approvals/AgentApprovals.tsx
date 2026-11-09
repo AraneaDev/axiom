@@ -1,5 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, CheckCircle, History, Hourglass, Lock, X, XCircle } from 'lucide-react';
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  CheckCircle,
+  History,
+  Hourglass,
+  Lock,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -7,6 +17,7 @@ import { agentApprovalsApi, type AgentApprovalSummary } from '@/api/agent-approv
 import { serviceAccountError } from '@/api/service-accounts.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -16,7 +27,13 @@ import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/component
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import { effectiveStatus, REFETCH_MS, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/agent-approvals';
+import {
+  effectiveStatus,
+  REFETCH_MS,
+  SECRET_RESULT_ACTIONS,
+  STATUS_LABELS,
+  STATUS_VARIANTS,
+} from '@/lib/agent-approvals';
 import { formatRelative } from '@/lib/utils';
 
 import { BotLine } from './BotLine';
@@ -66,6 +83,8 @@ export default function AgentApprovals() {
     {
       successMessage: null,
       errorMessage: null,
+      // An answer is never kept: it may hold what a run returned
+      gcTime: 0,
       onSuccess: (row) => {
         if (row.status === 'FAILED') toast.error('Approved, but the action failed');
         else toast.success(row.status === 'REJECTED' ? 'Request rejected' : 'Approved');
@@ -75,6 +94,10 @@ export default function AgentApprovals() {
       onError: () => void queryClient.invalidateQueries({ queryKey: ['agent-approvals'] }),
     },
   );
+
+  // Decided elsewhere meanwhile (409): no error, the list read again shows the outcome
+  const decisionError =
+    (decide.error as { status?: number } | null)?.status === 409 ? null : decide.error;
 
   const rows = (data?.data ?? []).filter((row) =>
     tab === 'pending'
@@ -100,9 +123,9 @@ export default function AgentApprovals() {
         className="mb-4"
       />
 
-      {decide.error && (
+      {decisionError && (
         <div className="mb-4">
-          <ErrorAlert error={new Error(serviceAccountError(decide.error))} fallback="" />
+          <ErrorAlert error={new Error(serviceAccountError(decisionError))} fallback="" />
         </div>
       )}
 
@@ -169,25 +192,39 @@ export default function AgentApprovals() {
                     {tab === 'pending' && (
                       <Td>
                         {/* A stub is decided by an owner who can open its place, never here */}
-                        {!row.restricted && status === 'PENDING' && (
-                          <div className="flex gap-1">
-                            <Button
+                        {!row.restricted &&
+                          status === 'PENDING' &&
+                          SECRET_RESULT_ACTIONS.has(row.action) && (
+                            // Its secret shows once, to whoever approves it on its own page
+                            <ButtonLink
+                              to={`/approvals/agent/${row.id}`}
                               size="xs"
-                              disabled={decide.isPending}
-                              onClick={() => decide.mutate({ id: row.id, approve: true })}
+                              variant="secondary"
                             >
-                              <Check className="h-3.5 w-3.5" /> Approve
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              disabled={decide.isPending}
-                              onClick={() => decide.mutate({ id: row.id, approve: false })}
-                            >
-                              <X className="h-3.5 w-3.5" /> Reject
-                            </Button>
-                          </div>
-                        )}
+                              <ArrowRight className="h-3.5 w-3.5" /> Open
+                            </ButtonLink>
+                          )}
+                        {!row.restricted &&
+                          status === 'PENDING' &&
+                          !SECRET_RESULT_ACTIONS.has(row.action) && (
+                            <div className="flex gap-1">
+                              <Button
+                                size="xs"
+                                disabled={decide.isPending}
+                                onClick={() => decide.mutate({ id: row.id, approve: true })}
+                              >
+                                <Check className="h-3.5 w-3.5" /> Approve
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                disabled={decide.isPending}
+                                onClick={() => decide.mutate({ id: row.id, approve: false })}
+                              >
+                                <X className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </div>
+                          )}
                       </Td>
                     )}
                   </tr>

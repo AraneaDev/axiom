@@ -39,6 +39,17 @@ export const STATUS_VARIANTS: Record<
   CANCELLED: 'default',
 };
 
+/**
+ * The actions whose result holds a secret (redactResult on the server): the approving person sees
+ * it once, on the request's own page, so the list opens these instead of approving in place.
+ * src/actions/secret-results.test.ts keeps this equal to the server's list.
+ */
+export const SECRET_RESULT_ACTIONS: ReadonlySet<string> = new Set([
+  'invitation.create',
+  'invitation.list',
+  'token.create',
+]);
+
 /** How the list and the badge keep up: expiry sends no event, so they ask again. */
 export const REFETCH_MS = 20_000;
 

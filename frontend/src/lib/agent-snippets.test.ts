@@ -40,6 +40,14 @@ describe('connectSnippets', () => {
     expect(snippets.every((s) => s.value.includes(`Token ${token}`))).toBe(true);
   });
 
+  it('names the server as asked, in the command and in the config block', () => {
+    const [claude, codex] = connectSnippets(origin, token, 'axiom-triage-bot');
+    expect(claude.value).toMatch(/^claude mcp add --transport http axiom-triage-bot https:/);
+    expect(codex.value).toMatch(/^\[mcp_servers\.axiom-triage-bot\]\n/);
+    // A person's own connection keeps the name axiom
+    expect(agentSnippets('claude-code', origin, token)[0].value).toContain(' axiom https:');
+  });
+
   it('offers an agent every scope but admin', () => {
     expect(CONNECT_SCOPES.length).toBeGreaterThan(0);
     expect(CONNECT_SCOPES.some((s) => s.startsWith('admin:'))).toBe(false);

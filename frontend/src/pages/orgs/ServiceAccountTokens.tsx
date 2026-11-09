@@ -55,7 +55,10 @@ export function ServiceAccountTokens({ bot }: { bot: ServiceAccountDetail }) {
     token: ServiceAccountToken;
   } | null>(null);
   // The raw token lives only here: never in the query cache, so a refetch or reload drops it
-  const [revealed, setRevealed] = useState<NewServiceAccountToken | null>(null);
+  const [revealed, setRevealed] = useState<{
+    token: NewServiceAccountToken;
+    kind: 'created' | 'rotated';
+  } | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['service-account', bot.id] });
@@ -67,9 +70,11 @@ export function ServiceAccountTokens({ bot }: { bot: ServiceAccountDetail }) {
     {
       successMessage: 'Token rotated',
       errorMessage: null,
+      // The answer holds the raw token: the panel's state is its only home
+      gcTime: 0,
       onSuccess: (next) => {
         setConfirm(null);
-        setRevealed(next);
+        setRevealed({ token: next, kind: 'rotated' });
         refresh();
       },
       // Closed, so the reason shows on the panel; the list may have changed meanwhile
@@ -110,7 +115,18 @@ export function ServiceAccountTokens({ bot }: { bot: ServiceAccountDetail }) {
         </Button>
       </div>
 
-      {revealed && <RevealedToken created={revealed} onDone={() => setRevealed(null)} />}
+      {revealed && (
+        <RevealedToken
+          created={revealed.token}
+          kind={revealed.kind}
+          server={`axiom-${bot.username}`}
+          onDone={() => {
+            setRevealed(null);
+            // Nothing keeps the raw value once it is put away
+            rotate.reset();
+          }}
+        />
+      )}
       {actionError && (
         <div className="mb-3">
           <ErrorAlert error={new Error(serviceAccountError(actionError))} fallback="" />
@@ -147,7 +163,7 @@ export function ServiceAccountTokens({ bot }: { bot: ServiceAccountDetail }) {
           onClose={() => setCreating(false)}
           onCreated={(created) => {
             setCreating(false);
-            setRevealed(created);
+            setRevealed({ token: created, kind: 'created' });
             refresh();
           }}
         />
@@ -248,23 +264,29 @@ function TokenRow({
  * The raw token, the one time it is shown, with the snippets that connect an agent with it.
  * @param props - The new token
  * @param props.created - The token as the create or rotate call answered it
+ * @param props.kind - Whether it was made or a rotation
+ * @param props.server - The name the snippets give the server
  * @param props.onDone - Hide it for good
  */
 function RevealedToken({
   created,
+  kind,
+  server,
   onDone,
 }: {
   created: NewServiceAccountToken;
+  kind: 'created' | 'rotated';
+  server: string;
   onDone: () => void;
 }) {
-  const snippets = connectSnippets(window.location.origin, created.token);
+  const snippets = connectSnippets(window.location.origin, created.token, server);
   return (
     <div
       data-testid="new-token"
       className="mb-4 space-y-3 rounded-md border border-success/30 bg-success-light p-4"
     >
       <p className="text-sm font-medium text-success">
-        Token {created.name} created. Copy it now, you won't see it again.
+        Token {created.name} {kind}. Copy it now, you won't see it again.
       </p>
       <CopyInput label="token" value={created.token} />
       {snippets.map((s) => (
@@ -312,6 +334,8 @@ function CreateTokenModal({
     {
       successMessage: 'Token created',
       errorMessage: null,
+      // The answer holds the raw token: the panel's state is its only home
+      gcTime: 0,
       onSuccess: onCreated,
     },
   );

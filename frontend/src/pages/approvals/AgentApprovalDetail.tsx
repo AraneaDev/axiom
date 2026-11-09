@@ -1,5 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Bot, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Lock,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -173,40 +182,56 @@ function AgentApprovalDetailFor({ id }: { id: string }) {
           </Card>
         </aside>
         <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-          <Card className="p-5 mb-4">
-            <p className="mb-3 whitespace-pre-wrap break-words text-base font-medium text-text">
-              {row.preview}
-            </p>
-            <dl className="divide-y divide-border-light">
-              <Field label="Exact input">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => setShowInput(!showInput)}
-                  aria-expanded={showInput}
-                >
-                  {showInput ? (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  )}
-                  {showInput ? 'Hide input' : 'Show input'}
-                </Button>
-                {showInput && <Json value={row.input} />}
-              </Field>
-            </dl>
-          </Card>
-          {open && (
-            <div className="flex items-center gap-2 mb-4">
-              <Button onClick={() => approve.mutate()} disabled={busy}>
-                {approve.isPending ? <Spinner size="sm" /> : <Check className="h-4 w-4" />}
-                Approve
-              </Button>
-              <Button variant="outline" onClick={() => reject.mutate()} disabled={busy}>
-                {reject.isPending ? <Spinner size="sm" /> : <X className="h-4 w-4" />}
-                Reject
-              </Button>
-            </div>
+          {row.restricted ? (
+            // A stub: the bot asked in a place this owner can't open, so there is nothing to read
+            // and nothing for them to decide
+            <Card className="p-5 mb-4">
+              <p className="inline-flex items-center gap-1.5 text-base font-medium text-text-secondary">
+                <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />A request in a place you
+                can&apos;t open
+              </p>
+              <p className="mt-2 text-sm text-text-secondary">
+                An owner of this bot who can open that place decides it.
+              </p>
+            </Card>
+          ) : (
+            <>
+              <Card className="p-5 mb-4">
+                <p className="mb-3 whitespace-pre-wrap break-words text-base font-medium text-text">
+                  {row.preview}
+                </p>
+                <dl className="divide-y divide-border-light">
+                  <Field label="Exact input">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setShowInput(!showInput)}
+                      aria-expanded={showInput}
+                    >
+                      {showInput ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                      {showInput ? 'Hide input' : 'Show input'}
+                    </Button>
+                    {showInput && <Json value={row.input} />}
+                  </Field>
+                </dl>
+              </Card>
+              {open && (
+                <div className="flex items-center gap-2 mb-4">
+                  <Button onClick={() => approve.mutate()} disabled={busy}>
+                    {approve.isPending ? <Spinner size="sm" /> : <Check className="h-4 w-4" />}
+                    Approve
+                  </Button>
+                  <Button variant="outline" onClick={() => reject.mutate()} disabled={busy}>
+                    {reject.isPending ? <Spinner size="sm" /> : <X className="h-4 w-4" />}
+                    Reject
+                  </Button>
+                </div>
+              )}
+            </>
           )}
 
           {decisionError && (

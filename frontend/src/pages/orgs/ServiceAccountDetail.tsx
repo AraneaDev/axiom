@@ -7,6 +7,7 @@ import {
   Check,
   Clock,
   PauseCircle,
+  Lock,
   Pencil,
   PlayCircle,
   Plus,
@@ -104,6 +105,8 @@ export default function ServiceAccountDetail() {
 
   const onChanged = (next: Detail) => {
     queryClient.setQueryData<Detail>(key, next);
+    // Other owners open other places: what the bot may join is read again
+    void queryClient.invalidateQueries({ queryKey: ['service-account-joinable', id] });
     void queryClient.invalidateQueries({ queryKey: key });
     void queryClient.invalidateQueries({ queryKey: ['service-accounts'] });
   };
@@ -619,7 +622,7 @@ function AddPlaceModal({
           <p className="text-sm text-text-secondary">
             {kind === 'team'
               ? 'No team to add it to: it is in every team one of its owners is in.'
-              : 'No space to add it to. A space is offered when one of its owners can open it by a permission, and the bot cannot open it yet.'}
+              : "No space to add it to. A space is offered when it has permissions set, it is a space one of this bot's owners can open, and the bot cannot open it yet."}
           </p>
         ) : (
           <>
@@ -665,13 +668,21 @@ function RequestsCard({ botId }: { botId: string }) {
         <ul className="space-y-1.5">
           {requests.map((r) => (
             <li key={r.id}>
-              <Link
-                to={`/approvals/agent/${r.id}`}
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-              >
-                <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {r.preview}
-              </Link>
+              {r.restricted ? (
+                // A stub has no page this owner may open, and nothing to decide
+                <span className="inline-flex items-center gap-1.5 text-sm text-text-secondary">
+                  <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />A request in a place
+                  you can&apos;t open
+                </span>
+              ) : (
+                <Link
+                  to={`/approvals/agent/${r.id}`}
+                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {r.preview}
+                </Link>
+              )}
             </li>
           ))}
         </ul>

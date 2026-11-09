@@ -31,15 +31,21 @@ export interface Snippet {
  * @param client - Which client to configure
  * @param origin - The site origin, without a trailing slash
  * @param token - The raw token
+ * @param server - The name the client knows the server by: `axiom` for a person's own connection
  */
-export function agentSnippets(client: AgentClient, origin: string, token: string): Snippet[] {
+export function agentSnippets(
+  client: AgentClient,
+  origin: string,
+  token: string,
+  server = 'axiom',
+): Snippet[] {
   const url = new URL('api/mcp', `${origin}/`).href;
   const header = `Token ${token}`;
   if (client === 'claude-code') {
     return [
       {
         label: 'Command',
-        value: `claude mcp add --transport http axiom ${url} --header "Authorization: ${header}"`,
+        value: `claude mcp add --transport http ${server} ${url} --header "Authorization: ${header}"`,
       },
     ];
   }
@@ -47,7 +53,7 @@ export function agentSnippets(client: AgentClient, origin: string, token: string
     return [
       {
         label: '~/.codex/config.toml',
-        value: `[mcp_servers.axiom]\nurl = "${url}"\nhttp_headers = { "Authorization" = "${header}" }`,
+        value: `[mcp_servers.${server}]\nurl = "${url}"\nhttp_headers = { "Authorization" = "${header}" }`,
       },
     ];
   }
@@ -62,9 +68,14 @@ export function agentSnippets(client: AgentClient, origin: string, token: string
  * a page shows when it does not ask which client the token is for.
  * @param origin - The site origin, without a trailing slash
  * @param token - The raw token
+ * @param server - The server's name in the client: a bot's own (`axiom-<username>`) sits beside a
+ * person's `axiom` on the same machine
  */
-export function connectSnippets(origin: string, token: string): Snippet[] {
+export function connectSnippets(origin: string, token: string, server = 'axiom'): Snippet[] {
   return AGENT_CLIENTS.filter((c) => c.id !== 'other').flatMap((c) =>
-    agentSnippets(c.id, origin, token).map((s) => ({ ...s, label: `${c.label}: ${s.label}` })),
+    agentSnippets(c.id, origin, token, server).map((s) => ({
+      ...s,
+      label: `${c.label}: ${s.label}`,
+    })),
   );
 }

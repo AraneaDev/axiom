@@ -89,6 +89,24 @@ describe('AgentApprovalDetail', () => {
     expect(screen.queryByText(/^You, through/)).toBeNull();
   });
 
+  it('I2: a request in a place you cannot open shows only the stub: no input, no decision', async () => {
+    get.mockResolvedValue(
+      request({
+        userId: 'bot-1',
+        preview: 'A request in a place you cannot open',
+        restricted: true,
+        input: undefined,
+        serviceAccount: { id: 'bot-1', displayName: 'Triage bot' },
+      }),
+    );
+    show();
+    expect(await screen.findByText("A request in a place you can't open")).toBeInTheDocument();
+    expect(screen.getByText('Triage bot')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reject/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /show input/i })).toBeNull();
+  });
+
   it('approves, then shows the result', async () => {
     get.mockResolvedValue(request());
     approve.mockResolvedValue(request({ status: 'EXECUTED', result: { deleted: true } }));

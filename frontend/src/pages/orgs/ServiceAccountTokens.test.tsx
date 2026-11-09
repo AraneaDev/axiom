@@ -84,14 +84,24 @@ function Harness() {
   return data ? <ServiceAccountTokens bot={data} /> : null;
 }
 
-function show() {
+function show(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
+    <QueryClientProvider client={client}>
       <Harness />
     </QueryClientProvider>,
   );
+}
+
+/**
+ * Whether any mutation the client still holds carries this value
+ * @param client
+ * @param value
+ */
+function cachedAnywhere(client: QueryClient, value: string) {
+  return client
+    .getMutationCache()
+    .getAll()
+    .some((m) => JSON.stringify(m.state.data ?? null).includes(value));
 }
 
 describe('ServiceAccountTokens', () => {
@@ -184,7 +194,9 @@ describe('ServiceAccountTokens', () => {
       true,
     );
     expect(
-      values.some((v) => v.includes('[mcp_servers.axiom]') && v.includes(`Token ${RAW}`)),
+      values.some(
+        (v) => v.includes('[mcp_servers.axiom-nightly-triage]') && v.includes(`Token ${RAW}`),
+      ),
     ).toBe(true);
     expect(within(shown).getAllByRole('button', { name: /Copy/i }).length).toBeGreaterThan(0);
 
@@ -207,6 +219,49 @@ describe('ServiceAccountTokens', () => {
     expect(document.body.innerHTML).not.toContain(RAW);
   });
 
+  it("names the MCP server after the bot, so it sits beside a person's own axiom server", async () => {
+    api.get.mockResolvedValue(bot());
+    api.createToken.mockResolvedValue({ ...token({ id: 'tok-n' }), token: RAW });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /New token/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Create token/ }),
+    );
+    const shown = await screen.findByTestId('new-token');
+    const values = within(shown)
+      .getAllByRole('textbox')
+      .map((el) => (el as HTMLInputElement | HTMLTextAreaElement).value);
+    expect(
+      values.some((v) => v.startsWith('claude mcp add --transport http axiom-nightly-triage ')),
+    ).toBe(true);
+    expect(values.some((v) => v.startsWith('[mcp_servers.axiom-nightly-triage]'))).toBe(true);
+  });
+
+  it('M1: once the panel is done, no mutation holds the raw token', async () => {
+    api.get.mockResolvedValue(bot());
+    api.createToken.mockResolvedValue({ ...token({ id: 'tok-n' }), token: RAW });
+    api.rotateToken.mockResolvedValue({ ...token({ id: 'tok-r' }), token: `${RAW}rot` });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    show(client);
+    fireEvent.click(await screen.findByRole('button', { name: /New token/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Create token/ }),
+    );
+    fireEvent.click(
+      within(await screen.findByTestId('new-token')).getByRole('button', { name: /Done/ }),
+    );
+    await waitFor(() => expect(cachedAnywhere(client, RAW)).toBe(false));
+
+    fireEvent.click(screen.getByRole('button', { name: /Rotate nightly/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Rotate/ }),
+    );
+    fireEvent.click(
+      within(await screen.findByTestId('new-token')).getByRole('button', { name: /Done/ }),
+    );
+    await waitFor(() => expect(cachedAnywhere(client, `${RAW}rot`)).toBe(false));
+  });
+
   it('rotate says the old token works for 7 more days, then shows the new one once', async () => {
     api.get.mockResolvedValue(bot());
     api.rotateToken.mockResolvedValue({
@@ -221,6 +276,9 @@ describe('ServiceAccountTokens', () => {
     await waitFor(() => expect(api.rotateToken).toHaveBeenCalledWith('bot-1', 'tok-1'));
     const shown = await screen.findByTestId('new-token');
     expect(within(shown).getByLabelText('token')).toHaveValue(RAW);
+    // A rotation says so, not that a token was created
+    expect(within(shown).getByText(/rotated/)).toBeInTheDocument();
+    expect(within(shown).queryByText(/created/)).toBeNull();
   });
 
   it('a token rotated before offers no rotate, and a second rotation in a race says so in plain words', async () => {
