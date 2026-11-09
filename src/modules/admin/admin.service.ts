@@ -232,7 +232,7 @@ export async function updateUser(userId: string, data: { role?: string; disabled
       const memberships = await tx.orgMembership.findMany({ where: { userId } });
       for (const m of memberships) {
         if (m.role !== 'OWNER' || role === 'OWNER') continue;
-        await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' ORDER BY "userId" FOR UPDATE`;
         await assertNotLastOwnerTx(tx, m.orgId);
       }
       await tx.orgMembership.updateMany({ where: { userId }, data: { role } });
@@ -265,7 +265,7 @@ export async function deleteUser(userId: string) {
   const guardLastOwner = async (tx: Prisma.TransactionClient) => {
     const owned = await tx.orgMembership.findMany({ where: { userId, role: 'OWNER' } });
     for (const m of owned) {
-      await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' ORDER BY "userId" FOR UPDATE`;
       await assertNotLastOwnerTx(tx, m.orgId);
     }
   };
@@ -290,7 +290,9 @@ export async function deleteUser(userId: string) {
   });
   // Live sockets authenticated before the delete: close them
   disconnectUser(userId);
-  await recheckBots(ownedBots);
+  // The cascade took their owner rows: each bot lost an owner, which a bot already suspended by
+  // hand reports as having none left
+  await recheckBots(ownedBots, { lostOwner: true });
   return { deleted: true };
 }
 

@@ -74,7 +74,8 @@ export async function withOwnersLocked<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${orgId} AND role = 'OWNER' FOR UPDATE`;
+    // In userId order, the order every bot check takes OWNER rows in: never crosswise
+    await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${orgId} AND role = 'OWNER' ORDER BY "userId" FOR UPDATE`;
     return fn(tx);
   });
 }

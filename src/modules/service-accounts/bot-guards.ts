@@ -114,7 +114,9 @@ export async function lockBots(tx: Tx, userIds: string[]): Promise<string[]> {
 
 /**
  * Of some users, those who can own a bot of the org now, with their org membership rows locked:
- * a demotion or removal waits until the transaction ends.
+ * a demotion or removal waits until the transaction ends. OWNER rows first, then the rest, each
+ * in userId order: the order withOwnersLocked and the admin role change take OWNER rows in, so a
+ * check never holds one row while a writer holds the other.
  * @param tx - The transaction
  * @param orgId - The bot's org
  * @param userIds - The candidates
@@ -131,7 +133,7 @@ export async function lockEligibleOwners(
     WHERE m."orgId" = ${orgId} AND m."userId" = ANY(${userIds})
       AND m.role::text = ANY(${OWNER_ROLES})
       AND u.kind = 'PERSON' AND u."deactivatedAt" IS NULL
-    ORDER BY m."userId"
+    ORDER BY (m.role = 'OWNER') DESC, m."userId"
     FOR SHARE OF m`;
   return rows.map((r) => r.userId);
 }
@@ -362,8 +364,11 @@ export async function assertPlacesKept(tx: Tx, botId: string, owners: string[]):
   }
 }
 
-/** Owner rows a check removes first: one person's, or those of everyone no longer eligible */
-type Drop = { ownerId: string } | 'lapsed';
+/**
+ * Owner rows a check removes first: one person's, or those of everyone no longer eligible. Or
+ * cascaded: a delete already removed one, which counts as an owner lost.
+ */
+type Drop = { ownerId: string } | 'lapsed' | 'cascaded';
 
 /** What happened to a bot's ownership in one check */
 type OwnerChange = 'orphaned' | 'ownerless' | null;
@@ -443,8 +448,9 @@ async function reconcile(botId: string, scope: Scope, drop?: Drop): Promise<void
   const outcome = await prisma.$transaction(async (tx): Promise<Outcome | null> => {
     const account = await lockServiceAccount(tx, botId);
     if (!account) return null;
-    let lostOwner = false;
-    if (drop && drop !== 'lapsed') {
+    // A delete's cascade already took the owner row: it was lost all the same
+    let lostOwner = drop === 'cascaded';
+    if (drop && typeof drop === 'object') {
       const gone = await tx.serviceAccountOwner.deleteMany({
         where: { serviceAccountId: botId, ownerId: drop.ownerId },
       });
@@ -712,9 +718,15 @@ export async function onOwnershipLapseEverywhere(userId: string): Promise<void> 
 /**
  * Check every place of some bots: after a delete cascaded an owner's rows away.
  * @param botIds - The bots
+ * @param opts - What happened to them
+ * @param opts.lostOwner - Each lost an owner row to the cascade, so a bot already suspended by
+ * hand that has none left is reported as ownerless
  */
-export async function recheckBots(botIds: string[]): Promise<void> {
-  for (const botId of botIds) await recheck(botId, 'all');
+export async function recheckBots(
+  botIds: string[],
+  opts: { lostOwner?: boolean } = {},
+): Promise<void> {
+  for (const botId of botIds) await recheck(botId, 'all', opts.lostOwner ? 'cascaded' : undefined);
 }
 
 /**

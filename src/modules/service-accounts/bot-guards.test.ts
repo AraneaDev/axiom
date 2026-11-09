@@ -725,4 +725,58 @@ describe('service accounts: only where an owner is, and suspension', () => {
       0,
     );
   });
+
+  // ─── Fix round 2 ─────────────────────────────────────────
+
+  it('owner rows lock in one order: an OWNER co-owner sorting after the removed member', async () => {
+    const [first, second] = [await person(), await person()];
+    const [x, a] = first.id < second.id ? [first, second] : [second, first];
+    await prisma.orgMembership.updateMany({
+      where: { orgId: ctx.orgId, userId: a.id },
+      data: { role: 'OWNER' },
+    });
+    const b = await bot([x.id, a.id], false);
+    const rowA = await prisma.orgMembership.findFirstOrThrow({
+      where: { orgId: ctx.orgId, userId: a.id },
+    });
+    // Something holds A's row, so the removal of X queues on the org's OWNER rows first
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held!: () => void;
+    const isHeld = new Promise<void>((resolve) => (held = resolve));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM org_memberships WHERE id = ${rowA.id} FOR UPDATE`;
+        held();
+        await gate;
+      },
+      { timeout: 10_000 },
+    );
+    await isHeld;
+    const removal = removeOrgMember(ctx.orgId, x.id);
+    expect(await settledWithin(removal, 300)).toBe('pending');
+    // A bot check on both owners: taking X before A would hold X while the removal holds A
+    const check = setOwners(b.id, [x.id, a.id]);
+    expect(await settledWithin(check, 300)).toBe('pending');
+    release();
+    await holder;
+    await expect(removal).resolves.toBeUndefined();
+    // The check ran after the removal: X is no owner anymore
+    await expect(check).rejects.toMatchObject({ code: 'SERVICE_ACCOUNT_OWNER_INVALID' });
+  });
+
+  it('deleting the last owner of a manually suspended bot tells the org owners and admins', async () => {
+    const owner = await person('MEMBER');
+    const b = await bot([owner.id]);
+    const suspend = await authPost(`/api/service-accounts/${b.id}/suspend`, owner.token, {});
+    expect(suspend.status).toBe(200);
+    const before = await Promise.all([notices(ctx.owner.id), notices(orgAdmin.id)]);
+    const res = await authDel(`/api/admin/users/${owner.id}`, platformAdmin.token);
+    expect(res.status).toBe(200);
+    const row = await account(b.id);
+    expect(row.status).toBe('SUSPENDED');
+    expect(row.suspendedReason).toBe('MANUAL');
+    expect(await notices(ctx.owner.id)).toBe(before[0] + 1);
+    expect(await notices(orgAdmin.id)).toBe(before[1] + 1);
+  });
 });
