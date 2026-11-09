@@ -58,6 +58,17 @@ function forbiddenKeys(value: unknown, path = '$'): string[] {
 async function countStatements(work: () => Promise<unknown>): Promise<number> {
   const spy = vi.spyOn(Client.prototype, 'query');
   try {
+    // Work an earlier test left running without await (a notification, an automation run) can
+    // still be querying: wait for 100 ms without a statement, at most 3 s, then count from zero
+    for (
+      let waited = 0, seen = -1;
+      waited < 3000 && seen !== spy.mock.calls.length;
+      waited += 100
+    ) {
+      seen = spy.mock.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    spy.mockClear();
     await work();
     return spy.mock.calls.length;
   } finally {
