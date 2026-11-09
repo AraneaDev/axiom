@@ -193,20 +193,20 @@ A call from an API token (REST or `/api/act`) that needs approval runs nothing a
 }
 ```
 
-A browser session never gets this. Destructive actions, bulk actions over 10 items, moves across a project or space, permission changes and every admin action wait by default; org and user policies change that, except for admin. An approval runs the action as the requesting user with their rights at approval time. The result of `token.create` has its `token` removed from what the agent reads: the raw token is in the response to the approval only.
+A browser session never gets this. Destructive actions, bulk actions over 10 items, moves across a project or space, permission changes and every admin action wait by default; org and user policies change that, except for admin. An approval runs the action as the requesting user with their rights at approval time. A bot's request is decided by its owners who can open every team, space and page it touches; the others see a stub without preview or input. The result of `token.create` has its `token` removed from what the agent reads: the raw token is in the response to the approval only.
 
 Endpoints, all `approvals` area:
 
 | Method and path | Action | Notes |
 | --- | --- | --- |
-| `GET /api/agent-approvals` | `agentApproval.list` | `status`, `state` (`open` or `decided`), `limit` (100 at most), `offset`; your own requests |
+| `GET /api/agent-approvals` | `agentApproval.list` | `status`, `state` (`open` or `decided`), `limit` (100 at most), `offset`; your own requests, and those of the [service accounts](#service-accounts) you own |
 | `GET /api/agent-approvals/:id` | `agentApproval.get` | One request with input and outcome |
 | `GET /api/agent-approvals/:id/wait` | `agentApproval.wait` | Waits up to 25 seconds (`seconds`), two at once per user (`429`) |
 | `POST /api/agent-approvals/:id/approve` | `agentApproval.approve` | Web UI only |
 | `POST /api/agent-approvals/:id/reject` | `agentApproval.reject` | Web UI only |
 | `GET`, `PUT /api/agent-policy` | `agentPolicy.get`, `agentPolicy.update` | `scope` `org` (owners write) or `user` (tighten only); update is an admin action |
 
-Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` and `FAILED`. Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default). Deletes, approval gate writes and votes wait for approval like any destructive action; none is refused outright. An org policy that lists `attachment.upload` (the multipart upload, which can't wait) in `alsoRequire` refuses it to tokens outright (`403`); `attachment.createUploadUrl` and `attachment.fromUrl` wait for approval like any other action. A token that has an expiry can only create tokens that expire by then; a token with none is free. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
+Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED`, `FAILED` and `CANCELLED` (a bot's request when the bot was suspended or deleted). Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default), and for a bot's request from an hour to 30 days (7 days by default, `botExpiresMinutes`). Deletes, approval gate writes and votes wait for approval like any destructive action; none is refused outright. An org policy that lists `attachment.upload` (the multipart upload, which can't wait) in `alsoRequire` refuses it to tokens outright (`403`); `attachment.createUploadUrl` and `attachment.fromUrl` wait for approval like any other action. A token that has an expiry can only create tokens that expire by then; a token with none is free. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
 
 ### Uploads
 
@@ -818,6 +818,54 @@ Accept an invitation using a token from an invitation email.
   "org": { "id": "org_01HZ...", "slug": "aranea-dev" }
 }
 ```
+
+---
+
+## Service accounts
+
+Base path: `/api`
+
+A service account is a bot of one org: a user of kind `SERVICE` with no password, its own tokens and one or more owners. The [MCP server guide](axiom-mcp-server.md#service-accounts) explains owners, places, approvals and suspension. All actions are in the `orgs` area. Creating, editing, deleting, setting owners and every token action are web UI only (`uiOnly`). Suspend and resume are admin actions: a token's call waits for approval.
+
+Who may call them: an org owner or admin (a platform admin too) for everything; an owner of the bot for reading it, its tokens, suspend and resume. An owner who tries an org admin's change gets `403`. Anyone else gets `404`, as if the bot did not exist.
+
+| Method and path | Action | Notes |
+| --- | --- | --- |
+| `POST /api/orgs/:orgId/service-accounts` | `serviceAccount.create` | Web UI only. `username`, `displayName`, `description` (500 characters at most), `ownerIds` (1 to 50). `201` |
+| `GET /api/orgs/:orgId/service-accounts` | `serviceAccount.list` | All of the org's bots for an org admin, the ones you own otherwise |
+| `GET /api/service-accounts/:id` | `serviceAccount.get` | Status, owners, teams, spaces and tokens (never their hashes) |
+| `PATCH /api/service-accounts/:id` | `serviceAccount.update` | Web UI only. `displayName`, `description` |
+| `PUT /api/service-accounts/:id/owners` | `serviceAccount.setOwners` | Web UI only. `ownerIds` replaces the owners; resumes an orphaned bot |
+| `DELETE /api/service-accounts/:id` | `serviceAccount.delete` | Web UI only. Tokens, memberships and owners go, waiting requests are cancelled; the deactivated user stays as the author of its history. `204` |
+| `POST /api/service-accounts/:id/suspend` | `serviceAccount.suspend` | Admin action. Its tokens stop at once and its waiting requests are cancelled |
+| `POST /api/service-accounts/:id/resume` | `serviceAccount.resume` | Admin action. Resumes a bot suspended by hand |
+| `POST /api/service-accounts/:id/tokens` | `serviceAccount.createToken` | Web UI only. `name`, `scopes` (no `admin`), `expiresInDays` (1 to 365, 90 by default). The raw `token` is in this response only. `201` |
+| `POST /api/service-accounts/:id/tokens/:tokenId/rotate` | `serviceAccount.rotateToken` | Web UI only. A new token with the same name, scopes and lifetime; the old one stops within 7 days |
+| `DELETE /api/service-accounts/:id/tokens/:tokenId` | `serviceAccount.revokeToken` | Web UI only. At once. `204` |
+
+A bot token uses the `Token` scheme like any API token. A suspended bot's token answers `401 SERVICE_ACCOUNT_SUSPENDED`; a deleted bot's answers `401 INVALID_TOKEN`.
+
+Refusals with a code of their own:
+
+| Status and code | When |
+| --- | --- |
+| `400 SERVICE_ACCOUNT_OWNER_INVALID` | An owner is not a person in the org with role member or above |
+| `400 SERVICE_ACCOUNT_OWNER_NEEDED` | New owners would leave a team, space or page of the bot with none of them able to open it |
+| `400 SERVICE_ACCOUNT_OWNER_NOT_MEMBER` | Adding the bot to a team, space or page none of its owners can open |
+| `400 SERVICE_ACCOUNT_ROLE_LIMIT` | Making the bot a team admin or a space admin |
+| `400 SERVICE_ACCOUNT_ROLE_FIXED` | Changing the bot's org role |
+| `400 SERVICE_ACCOUNT_MANAGED_BY_ORG` | Removing the bot from its org, or managing it under `/api/admin`: delete it instead |
+| `400 SERVICE_ACCOUNT_USE_SUSPEND` | Deactivating the bot: suspend it instead |
+| `400 SERVICE_ACCOUNT_ORPHANED` | Resuming a bot with no owner: give it an owner instead |
+| `400 SERVICE_ACCOUNT_SUSPENDED` | Creating or rotating a token of a suspended bot |
+| `400 SERVICE_ACCOUNT_ADMIN_SCOPE` | A bot token with an `admin` scope |
+| `400 SERVICE_ACCOUNT_TOKEN_ELSEWHERE` | A personal token for a bot |
+| `400 SERVICE_ACCOUNT_NOT_INVITABLE` | Adding the bot to an org by invite or membership |
+| `400 SERVICE_ACCOUNT_NOT_ASSIGNABLE`, `400 SERVICE_ACCOUNT_NOT_WATCHER` | The bot as the value of a user custom field, or as a watcher |
+| `400 SERVICE_ACCOUNT_NO_USER_POLICY` | An agent policy with scope `user` for a bot |
+| `409 TOKEN_ALREADY_ROTATED` | Rotating a token a second time: rotate its replacement |
+
+Owners get a `service_account` notification when a bot token is two weeks from expiry, and when the bot leaves a place they can open. The org's owners and admins get one when a bot loses its last owner. The worker checks every active bot each hour and repairs what it finds (see the [MCP server guide](axiom-mcp-server.md#where-a-bot-can-be)).
 
 ---
 

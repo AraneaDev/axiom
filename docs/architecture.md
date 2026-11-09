@@ -70,7 +70,7 @@ One image, one codebase. Each container runs a different entry point. Production
 |---|---|---|---|---|
 | `migrate` | `node dist/migrate.js` (one-shot) | none | Runs `prisma migrate deploy`. Exits 0. |
 | `api` | `node dist/index.js` | `uploads` | `${PORT:-7000}:3000` | REST, WebSocket, MCP, and the built SPA (served from `/app/public`). |
-| `worker` | `node dist/worker.js` | none | none | Email queue consumer. |
+| `worker` | `node dist/worker.js` | none | none | Email queue consumer and the periodic jobs: uploads, agent approvals, GitHub deliveries, reconcile and imports, and the hourly service account job. |
 | `db`, `redis` | images | `pgdata`, `redis_data` | internal | `redis` requires `REDIS_PASSWORD`. |
 
 `api` and `worker` each declare `depends_on: migrate: condition: service_completed_successfully`, so migrations finish before either of them starts.
@@ -159,6 +159,20 @@ A public action is declared with `definePublicAction`, whose context has no `use
 
 OpenAPI and `describe` are generated from the same definitions, so documentation can't drift from behavior. `src/actions/parity.test.ts` and `registry-rules.test.ts` fail when a route, an input type or a scope rule drifts.
 
+#### Where an action acts
+
+Every write a token can reach declares where it acts: a `place` resolver from `src/actions/places.ts`, which reads the teams, spaces and pages its input touches from the database, or `orgLevel: true` when it touches none. `registry-rules.test.ts` fails on a write with neither, or with both. The approval gate stores the result on a bot's request (`placeTeamIds`, `placeSpaceIds`, `placePageIds`, `placeOrgLevel`). A resolver that finds nothing for an action that isn't org level leaves a request nobody can decide, never one anybody can.
+
+### Service accounts
+
+A service account (`src/modules/service-accounts/`) gives an unattended bot its own identity. It is a `User` of kind `SERVICE` with an unusable password hash, plus a `ServiceAccount` row (its one org, creator, description, status `ACTIVE` or `SUSPENDED` with reason `ORPHANED` or `MANUAL`) and `ServiceAccountOwner` rows for the people who answer for it. Its rights are its team memberships, space permissions and page restrictions, checked by the same code as a person's; its org role is fixed at member.
+
+- **Persons and non-persons.** `person.ts` holds `isPerson` (cached) and `assertPersonTarget`. Every path that assigns, notifies, mentions, adds a watcher or invites refuses a user who is no person as the target. A bot as the actor is never refused there.
+- **Tokens.** `middleware/auth.ts` resolves a bot token like any other, then refuses it when the service account is gone or the user deactivated (`401 INVALID_TOKEN`) or the bot is suspended (`401 SERVICE_ACCOUNT_SUSPENDED`). Bot tokens always expire (1 to 365 days, 90 by default) and rotate once, the old one ending within 7 days (`rotatedAt`).
+- **Approvals.** `agent-approvals.gate.ts` gives a bot's request the org's `botExpiresMinutes` (7 days by default, up to 30) and its place. `agent-approvals.service.ts` shows it to the bot's eligible owners (`owners.ts`), as a stub to an owner who can't open its place (`request-place.ts`), and lets only owners who can open it decide. The run checks the bot again: a bot deleted, suspended or deactivated since makes the request `CANCELLED`. The audit row carries `approvedById`. On issue approval gates a bot's owners count as the requester.
+- **Owner present.** `bot-guards.ts` keeps one invariant: every team the bot is in, every space it can view (its own permission or a team-role grant) and every page that lists it has an owner who can open it. Joining a place checks it in the write's transaction (`assertOwnerPresent`) and `setOwners` checks it for the new owners (`assertPlacesKept`). After a change commits, hooks repair it: `onOwnerLeft`, `onOrgRoleChanged`, `onOwnershipLapse`, `onSpaceChanged` and `onPageChanged` take the bot out of a place none of its owners can open, and suspend it as `ORPHANED` with its pending requests cancelled when no owner is left. Each check locks the service account row (`FOR UPDATE`) and then what it reads about the owners (`FOR SHARE`); a path that removes a person locks that person's org membership first, so the two never wait on each other crosswise.
+- **The worker job.** Hooks log a failure and move on. The worker's hourly job is the backstop: `notifyExpiringBotTokens` (`token-expiry.job.ts`) tells the owners of each bot token within 14 days of expiry, once, claiming the token through `expiryNotifiedAt` first, and `sweepServiceAccounts` runs the same check over every place of every active bot, dropping owner rows that lapsed.
+
 ### Supporting Infrastructure
 
 - `src/realtime/` — WebSocket server, Yjs collaboration
@@ -166,6 +180,7 @@ OpenAPI and `describe` are generated from the same definitions, so documentation
 - `src/email/` — BullMQ-backed email queue (started only when `SMTP_HOST` is set)
 - `src/actions/` — The action registry: `defineAction`, `registerActions`, `executeAction`, the REST adapter, `act` batches, keys and `item.read`. Modules declare their actions in `*.actions.ts`
 - `src/mcp/` — The MCP server: five tools (`search`, `read`, `describe`, `act`, `upload`) over the registry, stateless Streamable HTTP
+- `src/modules/service-accounts/`: Service accounts (bots): the accounts, owners, bot tokens, the owner-present invariant and the hourly worker job
 - `src/modules/github/`: The GitHub integration: one client module (`github-client.ts`, which checks every host it calls), the App set up through GitHub's manifest flow, the webhook and its delivery log, and users' connected accounts. Auth resolvers (`github-resolvers.ts`) and webhook handlers (`webhook-handlers.ts`) are imported by both `index.ts` and `worker.ts`
 - `src/lib/secret-box.ts`, `src/lib/secret-migration.ts`, Encryption of stored secrets and re-encryption on key rotation
 - `src/lib/openapi/` — OpenAPI and the `/api/docs` page, generated from the registry

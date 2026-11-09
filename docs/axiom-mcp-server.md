@@ -438,7 +438,7 @@ Naming `attachment.upload` in `alsoRequire` refuses it to tokens outright (`403`
 
 ### Waiting for the outcome
 
-Call `agentApproval.wait` with the `approvalId`. It waits up to 25 seconds and answers the current status: `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` or `FAILED`, with the result once it is `EXECUTED` and the error once it is `FAILED`. Call it again while it says `PENDING`. You can have two waits running at once. `agentApproval.get` and `agentApproval.list` read a request without waiting. All three need `approvals:read`, which a new token has by default.
+Call `agentApproval.wait` with the `approvalId`. It waits up to 25 seconds and answers the current status: `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED`, `FAILED` or, for a [service account](#service-accounts), `CANCELLED`, with the result once it is `EXECUTED` and the error once it is `FAILED`. Call it again while it says `PENDING`. You can have two waits running at once. `agentApproval.get` and `agentApproval.list` read a request without waiting. All three need `approvals:read`, which a new token has by default.
 
 A request can hold 256 KB of input at most (`400`), and you can have 50 waiting at once (`429`). A result over 1 MB makes the run `FAILED`. Input and result are cleared 30 days after the decision, and the row stays as a record.
 
@@ -468,6 +468,73 @@ A few reads and writes of your own state (your profile, notifications, your dash
 ### Over MCP
 
 Where a client supports elicitation, Axiom shows a pointer to the pending approval. An answer there approves nothing. The `/api/mcp` endpoint is stateless, so the server can't send an elicitation over HTTP and none fires today. The tool text carries the link instead, and `agentApproval.wait` carries the rest.
+
+## Service accounts
+
+A token acts as the person who made it. That suits an agent you drive. A bot that runs on its own, on a schedule outside Axiom (a cron job, a Claude routine, a CI schedule), gets a service account instead: its own identity, its own memberships and its own tokens. It uses the same API, MCP server and five tools as any token. Axiom schedules and runs nothing; it gives the bot a name, rights and an audit trail.
+
+### What a bot is
+
+A service account is a user of kind `SERVICE` in exactly one org. It has a username, a display name and a description, but no password: it never signs in, and every auth route refuses it. Its org role is fixed at member (`400 SERVICE_ACCOUNT_ROLE_FIXED`), it counts as no seat, and it leaves its org only by being deleted (`400 SERVICE_ACCOUNT_MANAGED_BY_ORG`). An org owner or admin creates, edits and deletes it in the web UI.
+
+A bot is never the target of what is meant for a person. It is never assigned, made a watcher, mentioned, notified or invited, and no member, assignee or mention picker offers it. As the actor it works like anyone: it can assign issues to people, and its comments, mentions and status changes notify people as yours do. Everything it does is recorded under its own name.
+
+Deleting a bot removes its tokens, memberships and owners and cancels its waiting requests. The user row stays, deactivated, so its past comments, issues and activity keep their author.
+
+### Owners
+
+Every bot has one to 50 owners, set by an org owner or admin (`serviceAccount.setOwners`). An owner is a person in the bot's org with role member or above (`400 SERVICE_ACCOUNT_OWNER_INVALID` otherwise). Owners decide the bot's approval requests, manage its tokens, and can suspend and resume it.
+
+Ownership lapses when an owner leaves the org, is deactivated, or is demoted to viewer or guest. Their owner row goes, and a bot left with no owner is suspended as orphaned (see [Suspension](#suspension)).
+
+### Where a bot can be
+
+A bot joins teams and wiki spaces through the same actions as a person, with a role of at most member on a team and at most edit on a space (`400 SERVICE_ACCOUNT_ROLE_LIMIT`). It joins only where one of its owners can open the place too (`400 SERVICE_ACCOUNT_OWNER_NOT_MEMBER`). Its rights come from those memberships, through the same checks as yours. Nothing grants a bot more.
+
+A place is each team the bot is in, each space it can view (by its own permission or through a team-role grant of one of its teams), and each page whose restrictions list it. Each one needs an owner who can open it, at all times:
+
+- Replacing the owners is refused while a place of the bot would have none of them left (`400 SERVICE_ACCOUNT_OWNER_NEEDED`). Remove the bot there first, or keep an owner who is there.
+- When the last owner who can open a place leaves it, loses a role, or a change of space permissions or page restrictions shuts them out, the bot leaves that place. A space it views through a team-role grant is left by leaving that team. The owners and the team's admins who can open the place are notified.
+- Every hour the worker checks every active bot: it drops the owner rows of people who can no longer own it, takes the bot out of each place none of its owners can open, and suspends a bot with no owner left. This catches whatever a change in between missed.
+
+### Tokens
+
+A bot's tokens are made, rotated and revoked by its owners or an org admin in the web UI. No token can call these actions, the bot's own included, and a personal token can't be made for a bot (`400 SERVICE_ACCOUNT_TOKEN_ELSEWHERE`). A bot token has the same per-area scopes as an agent token, without `admin` (`400 SERVICE_ACCOUNT_ADMIN_SCOPE`). The raw token is shown once.
+
+Every bot token expires: 90 days after it is made by default, 365 at most. Its owners are notified once, two weeks before it expires. Rotating a token (`serviceAccount.rotateToken`) makes a new one with the same name, scopes and lifetime, and sets the old one to stop within 7 days, so the bot can move over. A token is rotated once (`409 TOKEN_ALREADY_ROTATED`); a rotated token gets no expiry notice, since its replacement gets its own. Revoking takes effect at once.
+
+### Approvals and places
+
+A bot token's call that needs approval waits exactly as an agent token's does: it runs nothing and answers `202 pending_approval`. The same rules hold, including the ones no policy lifts (`admin`, `permissionChange`, `alwaysApprove`). The bot carries on with other work and picks up the outcome on a later run with `agentApproval.wait`, `get` or `list`.
+
+A bot's request waits 7 days by default. An org owner can set this from an hour to 30 days (`botExpiresMinutes` in the org's agent policy). A bot has no user policy of its own (`400 SERVICE_ACCOUNT_NO_USER_POLICY`): its org's rules hold.
+
+Each request records where it acts: the teams, spaces and pages its input touches. Every write action a token can reach declares this, or declares itself org level. The bot's owners see the request in their approvals list under the bot's name, and an owner who can open every place it touches can approve or reject it in the web UI. An owner who can't sees only "A request in a place you can't open", without its preview or input, and can't decide it. A request that touches no team, space or page is org level, and any owner decides it. An action that should name a place but finds none is decided by nobody, and expires.
+
+An approved request runs as the bot, with the bot's rights at that moment: approving never adds rights. The audit row names the bot and the owner who approved it. A request whose bot was deleted or suspended since ends `CANCELLED` and never runs.
+
+On an issue approval gate, a bot's owners count as the requester: where self-approval is off, none of them may vote on a request the bot raised.
+
+### Suspension
+
+A suspended bot's tokens answer `401 SERVICE_ACCOUNT_SUSPENDED` and its waiting requests are cancelled. A bot is suspended two ways:
+
+- **By hand.** An owner or an org admin calls `serviceAccount.suspend`, the one button that stops a leaked token's bot at once. `serviceAccount.resume` starts it again. Both are admin actions: a token's call waits for approval.
+- **Orphaned.** The bot lost its last owner. The org's owners and admins are notified. Giving it an owner (`serviceAccount.setOwners`) resumes it; `serviceAccount.resume` refuses an orphan (`400 SERVICE_ACCOUNT_ORPHANED`). An orphan keeps its places, so the new owners need to be able to open them.
+
+A bot suspended by hand that then loses its owners stays suspended by hand: only resume lifts that. While suspended, a bot gets no new tokens and none rotated (`400 SERVICE_ACCOUNT_SUSPENDED`). Suspension is a bot's only off switch: a platform admin can't deactivate it instead (`400 SERVICE_ACCOUNT_USE_SUSPEND`).
+
+### Service account limits
+
+| What | Limit |
+| --- | --- |
+| Owners | 1 to 50, each a person in the org with role member or above |
+| Role | Fixed org role member; at most member of a team and edit on a space |
+| Token lifetime | 1 to 365 days, 90 by default |
+| Expiry notice | Once per token, two weeks before it expires |
+| Rotation | Once per token; the old one stops within 7 days |
+| Request expiry | 7 days by default, an hour to 30 days per org |
+| Sweep | Every hour, in the worker |
 
 ## Scopes
 
