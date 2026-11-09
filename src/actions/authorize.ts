@@ -15,7 +15,7 @@ import {
 } from '../middleware/rbac';
 import { checkProjectAccess, checkProjectAction } from '../middleware/requireProjectAccess';
 import { isUserAdmin } from '../modules/admin/admin.service';
-import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { canAccessSpace } from '../modules/wiki/space-access';
 import { ERR } from '../utils/error-messages';
 import type { Action } from '../utils/permissions';
 

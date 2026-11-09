@@ -1,8 +1,8 @@
 import type { ActionContext, ActionDef } from '../../actions/define';
 import type { PlaceRefs } from '../../actions/places';
 import { prisma } from '../../config/database';
-import { canAccessSpace } from '../wiki/space-permissions.service';
-import { canViewPage } from '../wiki/wiki-permissions.service';
+import { canViewPage } from '../wiki/page-access';
+import { canAccessSpace } from '../wiki/space-access';
 
 /**
  * Where a request acts (decision 11), as a bot's request stores it: the teams, spaces and pages the

@@ -13,13 +13,13 @@ import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects'
 import { logActivity } from '../activity/activity.service';
 import { bindStagedAttachments } from '../attachments/upload-intents.service';
 
+import { canViewPage, canEditPage, hiddenPageIds } from './page-access';
 import { applyMerge, getPendingMerge } from './page-merge';
 import { createPageVersion, restoreDescription } from './page-versions';
 import { writePageBody } from './page-writes';
-import { canAccessSpace } from './space-permissions.service';
+import { canAccessSpace } from './space-access';
 import { broadcastWikiUpdated, isViewRestricted } from './wiki-broadcast';
 import { syncBodyMentions } from './wiki-issue-links.service';
-import { canViewPage, canEditPage, hiddenPageIds } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
 
 /**

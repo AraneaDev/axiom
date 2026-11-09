@@ -7,7 +7,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
-import { canAccessSpace } from './space-permissions.service';
+import { canAccessSpace } from './space-access';
 
 const VALID_REACTION_TYPES = ['thumbsup', 'heart', 'eyes', 'rocket', 'thinking', 'check'] as const;
 

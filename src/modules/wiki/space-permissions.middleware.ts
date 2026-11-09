@@ -4,7 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../../middleware/errorHandler';
 import { param } from '../../utils/params';
 
-import { canAccessSpace } from './space-permissions.service';
+import { canAccessSpace } from './space-access';
 
 /**
  * Middleware that checks whether the authenticated user has the required

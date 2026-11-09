@@ -14,8 +14,8 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { formatIssueKey } from '../../utils/issue-key';
 import { logger } from '../../utils/logger';
+import { canEditPage } from '../wiki/page-access';
 import { writePageBody } from '../wiki/page-writes';
-import { canEditPage } from '../wiki/wiki-permissions.service';
 import { createPage } from '../wiki/wiki.service';
 
 import { refPath, userAuth } from './github-actions.helpers';

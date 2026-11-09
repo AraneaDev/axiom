@@ -6,7 +6,7 @@ import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { logger } from '../../utils/logger';
 import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
 import { createNotification } from '../notifications/notifications.service';
-import { canAccessSpace } from '../wiki/space-permissions.service';
+import { canAccessSpace } from '../wiki/space-access';
 
 /**
  * Decisions 9 and 13: a bot only sits where one of its owners can open the place too. A place is

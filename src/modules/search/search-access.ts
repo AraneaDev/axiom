@@ -7,7 +7,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { canAccessSpace } from '../wiki/space-permissions.service';
+import { canAccessSpace } from '../wiki/space-access';
 
 /**
  * Prisma filter for projects the user can open.

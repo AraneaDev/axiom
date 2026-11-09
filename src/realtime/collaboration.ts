@@ -31,9 +31,9 @@ import type { AuthPayload } from '../middleware/auth';
 import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { isIntegrationUser } from '../modules/github/integration-user';
 import { isPerson } from '../modules/service-accounts/person';
+import { canEditPage, canViewPage } from '../modules/wiki/page-access';
 import { restoredVersionOf } from '../modules/wiki/page-versions';
-import { canAccessSpace } from '../modules/wiki/space-permissions.service';
-import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
+import { canAccessSpace } from '../modules/wiki/space-access';
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 

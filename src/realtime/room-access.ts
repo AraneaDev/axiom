@@ -9,7 +9,7 @@
 import { prisma } from '../config/database';
 import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
-import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { canAccessSpace } from '../modules/wiki/space-access';
 
 /** Most rooms one subscribe message may ask for; the rest of the request is refused. */
 export const MAX_ROOMS_PER_REQUEST = 50;

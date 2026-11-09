@@ -11,7 +11,7 @@ import { AppError } from '../middleware/errorHandler';
 import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { parseAxiomUrl } from '../modules/links/resolve-link.service';
 import { viewablePagesWhere, viewableProjectsWhere } from '../modules/search/search-access';
-import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { canAccessSpace } from '../modules/wiki/space-access';
 import { formatIssueKey } from '../utils/issue-key';
 import { PROJECT_URL_SELECT } from '../utils/prisma-selects';
 

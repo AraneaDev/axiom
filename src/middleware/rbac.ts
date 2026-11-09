@@ -2,8 +2,8 @@ import type { SpacePermissionLevel } from '@prisma/client';
 import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
-import { canAccessSpace } from '../modules/wiki/space-permissions.service';
-import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
+import { canEditPage, canViewPage } from '../modules/wiki/page-access';
+import { canAccessSpace } from '../modules/wiki/space-access';
 import { ERR } from '../utils/error-messages';
 import { param } from '../utils/params';
 import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';

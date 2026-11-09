@@ -17,7 +17,7 @@ import {
   lockServiceAccount,
   onOwnerLeft,
 } from '../service-accounts/bot-guards';
-import { canAccessSpace } from '../wiki/space-permissions.service';
+import { canAccessSpace } from '../wiki/space-access';
 
 /**
  * Create a new team within an organization, adding the creator as admin.

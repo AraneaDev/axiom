@@ -53,9 +53,10 @@ import {
 } from '../../utils/validation';
 import { ONE_SPACE_GRANT } from '../../utils/validation/user-validators';
 
+import { hiddenPageIds, pruneHiddenPages } from './page-access';
 import { assertPageDestinationWritable } from './page-destination';
+import { canAccessSpace } from './space-access';
 import * as spacePermissions from './space-permissions.service';
-import { canAccessSpace } from './space-permissions.service';
 import * as analyticsService from './wiki-analytics.service';
 import * as commentsService from './wiki-comments.service';
 import * as exportService from './wiki-export.service';
@@ -63,7 +64,6 @@ import { hydrateWikiPage } from './wiki-hydrate.service';
 import * as linkService from './wiki-issue-links.service';
 import * as labelsService from './wiki-labels.service';
 import * as pagePermissions from './wiki-permissions.service';
-import { hiddenPageIds, pruneHiddenPages } from './wiki-permissions.service';
 import * as starsService from './wiki-stars.service';
 import { bodyFromTemplate, resolveWikiTemplate } from './wiki-template-resolver.service';
 import * as templatesService from './wiki-templates.service';

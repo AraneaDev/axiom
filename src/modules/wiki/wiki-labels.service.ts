@@ -2,7 +2,7 @@ import { prisma } from '../../config/database';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
-import { hiddenPageIds } from './wiki-permissions.service';
+import { hiddenPageIds } from './page-access';
 
 /**
  * List all labels for a wiki page.

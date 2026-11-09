@@ -3,7 +3,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { assertPageAccess, checkWikiSpaceOrgAccess } from '../../middleware/rbac';
 import { ERR } from '../../utils/error-messages';
 
-import { canAccessSpace } from './space-permissions.service';
+import { canAccessSpace } from './space-access';
 
 /**
  * Where a page lands must be writable too: the route only checked the source page. The
