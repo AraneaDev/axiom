@@ -49,7 +49,7 @@ describe('a SERVICE user is never a person', () => {
       username: 'voorbeeld-member-svcperson',
     });
     ctx.member = member;
-    // A bot in the org and the team, as Task 2's create and Task 5's join will make it
+    // A bot in the org and, as a VIEWER (an active MEMBER bot is assignable), in the team
     const bot = await prisma.user.create({
       data: {
         email: `${botName}@service.invalid`,
@@ -58,7 +58,7 @@ describe('a SERVICE user is never a person', () => {
         passwordHash: '!',
         kind: 'SERVICE',
         orgMemberships: { create: { orgId: ctx.orgId, role: 'MEMBER' } },
-        teamMemberships: { create: { teamId: ctx.teamId, role: 'MEMBER' } },
+        teamMemberships: { create: { teamId: ctx.teamId, role: 'VIEWER' } },
         serviceAccount: { create: { orgId: ctx.orgId, createdById: ctx.owner.id } },
       },
     });

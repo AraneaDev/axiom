@@ -91,14 +91,17 @@ registerActions([
     kind: 'read',
     summary:
       'List the members of a team with their roles: people only, or with includeBots its ' +
-      'service accounts too',
+      'service accounts too, or with assignable the people and bots an issue can be assigned to',
     target: teamTarget,
-    input: teamTarget.extend({ includeBots: queryFlag }),
+    input: teamTarget.extend({ includeBots: queryFlag, assignable: queryFlag }),
     output: z.array(record),
     rest: { method: 'GET', path: '/api/teams/:teamId/members' },
     authorize: teamRead<z.infer<typeof teamTarget>>((input) => input.teamId),
-    handler: async (_ctx, { teamId, includeBots }) =>
-      teamsService.listTeamMembers(teamId, { includeBots: queryFlagSet(includeBots) }),
+    handler: async (_ctx, { teamId, includeBots, assignable }) =>
+      teamsService.listTeamMembers(teamId, {
+        includeBots: queryFlagSet(includeBots),
+        assignable: queryFlagSet(assignable),
+      }),
   }),
   defineAction({
     name: 'team.create',

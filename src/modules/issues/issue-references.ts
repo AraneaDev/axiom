@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
-import { isPerson } from '../service-accounts/person';
+import { isPerson, isServiceAccount } from '../service-accounts/person';
 import { validateTransition } from '../workflows/workflows.service';
 
 /**
@@ -38,19 +38,42 @@ export async function assertIssueRefsInProject(
 }
 
 /**
+ * Whether a user is a bot an issue of this project may be assigned to: a service account that is
+ * ACTIVE and has role MEMBER on the project's team.
+ * @param userId - The proposed assignee
+ * @param projectId - The issue's project
+ * @returns true for an active bot with team role MEMBER
+ */
+export async function isAssignableBot(userId: string, projectId: string): Promise<boolean> {
+  if (!(await isServiceAccount(userId))) return false;
+  const member = await prisma.teamMembership.findFirst({
+    where: {
+      userId,
+      role: 'MEMBER',
+      team: { projects: { some: { id: projectId } } },
+      user: { serviceAccount: { status: 'ACTIVE' } },
+    },
+    select: { id: true },
+  });
+  return !!member;
+}
+
+/**
  * An issue can only be assigned to someone on its project's team (or to no one). Otherwise
  * an issue could be handed to a stranger, who would then see it on their dashboard.
  * @param projectId - The issue's project
  * @param assigneeId - The proposed assignee; null, undefined or empty means unassigned
- * @throws {AppError} 400 when the user isn't a member of the project's team
+ * @throws {AppError} 400 when the user isn't a member of the project's team, or is a bot that is
+ *   not an active MEMBER of it
  */
 export async function assertAssignable(
   projectId: string,
   assigneeId: string | null | undefined,
 ): Promise<void> {
   if (!assigneeId) return;
-  // The integration user and bots are never assigned, even a bot that is on the team
+  // The integration user is never assigned. A bot is, when it is an active MEMBER of the team
   if (!(await isPerson(assigneeId))) {
+    if (await isAssignableBot(assigneeId, projectId)) return;
     throw new AppError(400, 'The assignee must be a member of the project team');
   }
   const member = await prisma.teamMembership.findFirst({

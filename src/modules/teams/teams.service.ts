@@ -192,10 +192,14 @@ export async function deleteTeam(teamId: string) {
  * @param teamId - The team ID
  * @param opts - What to list
  * @param opts.includeBots - Its service accounts too, for the member list; never for a picker
+ * @param opts.assignable - People plus the bots an issue can be assigned to (ACTIVE, role MEMBER)
  * @returns Array of team memberships with user details
  * @throws {AppError} 404 if team not found
  */
-export async function listTeamMembers(teamId: string, opts: { includeBots?: boolean } = {}) {
+export async function listTeamMembers(
+  teamId: string,
+  opts: { includeBots?: boolean; assignable?: boolean } = {},
+) {
   const team = await findOrThrow(
     prisma.team.findUnique({ where: { id: teamId } }),
     ERR.TEAM_NOT_FOUND,
@@ -204,14 +208,26 @@ export async function listTeamMembers(teamId: string, opts: { includeBots?: bool
   return prisma.teamMembership.findMany({
     // People only by default, as in getTeam: a bot is never offered in a picker. The member list
     // asks for bots too, and marks them
-    where: {
-      teamId,
-      user: { kind: opts.includeBots ? { in: ['PERSON', 'SERVICE'] } : 'PERSON' },
-    },
+    where: opts.assignable
+      ? {
+          teamId,
+          OR: [
+            { user: { kind: 'PERSON' } },
+            {
+              role: 'MEMBER',
+              user: { kind: 'SERVICE', serviceAccount: { status: 'ACTIVE' } },
+            },
+          ],
+        }
+      : {
+          teamId,
+          user: { kind: opts.includeBots ? { in: ['PERSON', 'SERVICE'] } : 'PERSON' },
+        },
     include: {
       user: {
         select: {
           ...USER_BASIC_SELECT,
+          kind: true,
           isAdmin: true,
           // Only the membership in this team's org: a member's other orgs are not shown
           orgMemberships: {
