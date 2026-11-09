@@ -1,11 +1,8 @@
 import { prisma } from '../../config/database';
+import { logger } from '../../utils/logger';
 
 import { deliverDueEvents } from './sender';
 
-/** Only one worker sends at a time: a second one skips its tick */
-const LOCK_KEY = 'bot-event-deliveries';
-/** Longer than a tick can run (its budget plus one last attempt) */
-const TICK_HOLD_MS = 5 * 60_000;
 /** Finished deliveries are kept this long */
 const KEEP_DAYS = 30;
 /** Cleanup runs at most this often, though the tick is every 15 seconds */
@@ -27,22 +24,57 @@ export async function cleanupBotEvents(now = new Date()): Promise<number> {
 }
 
 /**
- * One worker tick: send the due bot events under an advisory lock, then, at most once an hour,
- * delete old finished ones.
+ * One worker tick: send the due bot events, then, at most once an hour, delete old finished ones.
+ * Ticks may overlap, in one worker or several: each event is leased before it is sent.
  */
 export async function runBotDeliveries(): Promise<void> {
-  await prisma.$transaction(
-    async (tx) => {
-      const [{ locked }] = await tx.$queryRaw<
-        { locked: boolean }[]
-      >`SELECT pg_try_advisory_xact_lock(hashtextextended(${LOCK_KEY}, 0)) AS locked`;
-      if (!locked) return;
-      await deliverDueEvents();
-    },
-    { maxWait: 10_000, timeout: TICK_HOLD_MS },
-  );
+  await deliverDueEvents();
   if (Date.now() - lastCleanup >= CLEANUP_EVERY_MS) {
     lastCleanup = Date.now();
     await cleanupBotEvents();
+  }
+}
+
+/** How long shutdown waits for a tick in flight: one last attempt with room to record it */
+export const SHUTDOWN_WAIT_MS = 15_000;
+
+let inFlight: Promise<void> | null = null;
+
+/**
+ * Start a tick unless one is still running; its failure is logged.
+ * @param run - The tick (tests replace it)
+ * @returns The tick, or null when the last one has not finished
+ */
+export function startBotDeliveryTick(
+  run: () => Promise<void> = runBotDeliveries,
+): Promise<void> | null {
+  if (inFlight) return null;
+  const tick = run()
+    .catch((err) => {
+      logger.error('Bot event deliveries failed', {}, err as Error);
+    })
+    .finally(() => {
+      if (inFlight === tick) inFlight = null;
+    });
+  inFlight = tick;
+  return tick;
+}
+
+/**
+ * Wait for the tick in flight, at most SHUTDOWN_WAIT_MS. An event cut off mid-send stays leased
+ * and is sent again after the lease, which its Axiom-Event-Id lets the bot recognise.
+ * @returns Whether no tick is still running
+ */
+export async function waitForBotDeliveryTick(): Promise<boolean> {
+  const tick = inFlight;
+  if (!tick) return true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const gaveUp = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), SHUTDOWN_WAIT_MS);
+  });
+  try {
+    return await Promise.race([tick.then(() => true as const), gaveUp]);
+  } finally {
+    clearTimeout(timer);
   }
 }

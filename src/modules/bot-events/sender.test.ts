@@ -19,7 +19,12 @@ import type { PublicRequest } from '../automation/webhook';
 import { createServiceAccount } from '../service-accounts/service-accounts.service';
 import * as usersService from '../users/users.service';
 
-import { cleanupBotEvents } from './deliveries.job';
+import {
+  SHUTDOWN_WAIT_MS,
+  cleanupBotEvents,
+  startBotDeliveryTick,
+  waitForBotDeliveryTick,
+} from './deliveries.job';
 import {
   PAUSE_AFTER_FAILURES,
   RETRY_DELAYS_MINUTES,
@@ -373,6 +378,94 @@ describe('bot event sender', () => {
       lastError: 'timeout',
     });
     expect(await event(fine)).toMatchObject({ status: 'DELIVERED', attempts: 1 });
+  });
+
+  it('two ticks at once send each event once, in seq order per bot', async () => {
+    const a = await queue(botA, 3);
+    const b = await queue(botB, 2);
+    // A slow endpoint, so the two ticks overlap
+    answer = () => new Promise((resolve) => setTimeout(() => resolve(response(200)), 30));
+    const results = await Promise.all([run(), run()]);
+    const sent = calls.map(eventIdOf);
+    expect([...sent].sort()).toEqual([...a, ...b].sort());
+    expect(results.reduce((n, r) => n + r.sent, 0)).toBe(5);
+    expect(sent.filter((id) => a.includes(id!))).toEqual(a);
+    expect(sent.filter((id) => b.includes(id!))).toEqual(b);
+    for (const id of [...a, ...b]) {
+      expect(await event(id)).toMatchObject({ status: 'DELIVERED', attempts: 1 });
+    }
+  });
+
+  it('a claimed head is leased: a second tick within the lease does not send it', async () => {
+    const [id] = await queue(botA);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    answer = async () => {
+      reached();
+      await held;
+      return response(200);
+    };
+    const first = run();
+    await started;
+    const leased = await event(id);
+    expect(leased.status).toBe('PENDING');
+    expect(leased.nextAttemptAt.getTime()).toBe(clock.getTime() + SEND_TIMEOUT_MS + MINUTE);
+    expect(await run()).toEqual({ sent: 0, failed: 0, dropped: 0 });
+    release();
+    expect(await first).toEqual({ sent: 1, failed: 0, dropped: 0 });
+    expect(calls).toHaveLength(1);
+  });
+
+  describe('worker shutdown', () => {
+    it('waits for the tick in flight, and a second tick does not start meanwhile', async () => {
+      let finish!: () => void;
+      let done = false;
+      const tick = startBotDeliveryTick(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = () => {
+              done = true;
+              resolve();
+            };
+          }),
+      );
+      expect(tick).not.toBeNull();
+      expect(startBotDeliveryTick(async () => {})).toBeNull();
+      const waited = waitForBotDeliveryTick();
+      setTimeout(() => finish(), 20);
+      expect(await waited).toBe(true);
+      expect(done).toBe(true);
+      expect(await waitForBotDeliveryTick()).toBe(true);
+    });
+
+    it('gives up on a hanging tick after SHUTDOWN_WAIT_MS', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      let finish!: () => void;
+      startBotDeliveryTick(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      let result: boolean | undefined;
+      const waited = waitForBotDeliveryTick().then((r) => {
+        result = r;
+      });
+      await vi.advanceTimersByTimeAsync(SHUTDOWN_WAIT_MS - 1);
+      expect(result).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      await waited;
+      expect(result).toBe(false);
+      vi.useRealTimers();
+      finish();
+      await waitForBotDeliveryTick();
+    });
   });
 
   it("a suspended bot's pending events become DROPPED", async () => {

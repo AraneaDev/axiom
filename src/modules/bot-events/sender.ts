@@ -29,6 +29,8 @@ export const RETRY_DELAYS_MINUTES = [1, 5, 30, 120] as const;
 export const PAUSE_AFTER_FAILURES = 10;
 /** How long one attempt may take, connecting and answering */
 export const SEND_TIMEOUT_MS = 10_000;
+/** How long a claimed event stays out of other ticks' reach: an attempt plus a margin */
+export const LEASE_MS = SEND_TIMEOUT_MS + 60_000;
 
 /** Bots sent to at once */
 const PARALLEL_BOTS = 5;
@@ -259,6 +261,28 @@ async function stillWanted(event: BotEvent): Promise<boolean> {
 type Tally = { sent: number; failed: number; dropped: number };
 
 /**
+ * Lease a bot's head event for one attempt. The event stays PENDING, so the bot's queue keeps its
+ * order, and its due time moves past the attempt, so no other tick sends it meanwhile. A crash
+ * mid-send retries it once the lease runs out.
+ * @param head - The event, as read
+ * @param now - The time of the attempt
+ * @returns Whether this tick holds it: still PENDING, due, and the bot's lowest PENDING seq
+ */
+async function claim(head: BotEvent, now: Date): Promise<boolean> {
+  const until = new Date(now.getTime() + LEASE_MS);
+  const count = await prisma.$executeRaw`
+    UPDATE bot_events e SET "nextAttemptAt" = ${until}
+    WHERE e.id = ${head.id}
+      AND e.status = 'PENDING'
+      AND e."nextAttemptAt" <= ${now}
+      AND NOT EXISTS (
+        SELECT 1 FROM bot_events o
+        WHERE o."botId" = e."botId" AND o.status = 'PENDING' AND o.seq < e.seq
+      )`;
+  return count === 1;
+}
+
+/**
  * Send a bot's due events in seq order, until one fails, none is due, or the tick runs out.
  * @param botId - The bot's user id
  * @param deps - Replaceable dependencies (tests)
@@ -289,6 +313,7 @@ async function drainBot(
       tally.dropped += dropped.count;
       continue;
     }
+    if (!(await claim(head, now))) return;
     const result = await sendOne(head, webhook, deps);
     await record(head, result, now);
     if (!result.ok) {

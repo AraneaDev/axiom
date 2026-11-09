@@ -10,7 +10,7 @@ import {
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
 import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
-import { runBotDeliveries } from './modules/bot-events/deliveries.job';
+import { startBotDeliveryTick, waitForBotDeliveryTick } from './modules/bot-events/deliveries.job';
 import { cleanupAutomationMarks } from './modules/github/github-automation';
 import { runDueImports } from './modules/github/import-run.service';
 import { reconcileDueRepos } from './modules/github/reconcile.service';
@@ -31,7 +31,6 @@ let reconcileRunning = false;
 let importRunning = false;
 let markCleanupRunning = false;
 let serviceAccountsRunning = false;
-let botDeliveriesRunning = false;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
 function runUploadCleanup(): void {
@@ -123,15 +122,7 @@ function runServiceAccountJobs(): void {
 
 /** Send the due bot events and trim old ones; a tick that outlasts 15 s makes the next one wait. */
 function runBotDeliveryJobs(): void {
-  if (botDeliveriesRunning) return;
-  botDeliveriesRunning = true;
-  runBotDeliveries()
-    .catch((err) => {
-      logger.error('Bot event deliveries failed', {}, err as Error);
-    })
-    .finally(() => {
-      botDeliveriesRunning = false;
-    });
+  void startBotDeliveryTick();
 }
 
 async function main(): Promise<void> {
@@ -183,6 +174,10 @@ async function main(): Promise<void> {
     clearInterval(githubMarkCleanup);
     clearInterval(serviceAccounts);
     clearInterval(botDeliveries);
+    // A send cut off here would go out again after restart
+    if (!(await waitForBotDeliveryTick())) {
+      logger.warn('Worker stopped while bot events were still being sent');
+    }
     closeRealtimePublisher();
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
