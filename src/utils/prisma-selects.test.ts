@@ -4,7 +4,12 @@ import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from './prisma-selects';
 
 describe('Prisma select constants', () => {
   it('USER_BASIC_SELECT has correct fields', () => {
-    expect(Object.keys(USER_BASIC_SELECT).sort()).toEqual(['displayName', 'id', 'username']);
+    expect(Object.keys(USER_BASIC_SELECT).sort()).toEqual([
+      'displayName',
+      'id',
+      'kind',
+      'username',
+    ]);
     expect(Object.values(USER_BASIC_SELECT).every((v) => v === true)).toBe(true);
   });
 
@@ -13,6 +18,7 @@ describe('Prisma select constants', () => {
       'avatarUrl',
       'displayName',
       'id',
+      'kind',
       'username',
     ]);
     expect(Object.values(USER_WITH_AVATAR_SELECT).every((v) => v === true)).toBe(true);
