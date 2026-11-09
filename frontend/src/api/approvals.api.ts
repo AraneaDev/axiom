@@ -1,3 +1,5 @@
+import type { UserKind } from '@/lib/types';
+
 import { get, post, patch, del } from './client';
 
 export interface ApprovalGate {
@@ -15,7 +17,13 @@ export interface ApprovalGate {
 export interface ApprovalVote {
   id: string;
   userId: string;
-  user: { id: string; username: string; displayName: string; avatarUrl: string | null };
+  user: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+    kind?: UserKind;
+  };
   decision: 'APPROVED' | 'REJECTED';
   comment: string | null;
   createdAt: string;
@@ -28,7 +36,13 @@ export interface ApprovalRequest {
   targetColumnId: string;
   targetColumn: { id: string; name: string; position: number };
   requestedById: string;
-  requestedBy: { id: string; username: string; displayName: string; avatarUrl: string | null };
+  requestedBy: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+    kind?: UserKind;
+  };
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   createdAt: string;
   resolvedAt: string | null;

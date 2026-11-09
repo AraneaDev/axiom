@@ -1,3 +1,5 @@
+import type { UserKind } from '@/lib/types';
+
 import { get } from './client';
 
 export interface ActivityEvent {
@@ -10,6 +12,7 @@ export interface ActivityEvent {
     id: string;
     username: string;
     displayName: string;
+    kind?: UserKind;
     avatarUrl?: string;
   };
   details: Record<string, unknown> | null;

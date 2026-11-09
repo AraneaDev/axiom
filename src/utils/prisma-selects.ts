@@ -3,18 +3,22 @@
  * Import these constants instead of repeating the same select objects.
  */
 
-/** Basic user fields: id, username, displayName */
+/**
+ * Basic user fields: id, username, displayName, and kind, so a view can mark a bot
+ */
 export const USER_BASIC_SELECT = {
   id: true,
   username: true,
   displayName: true,
+  kind: true,
 } as const;
 
-/** User fields with avatar: id, username, displayName, avatarUrl */
+/** User fields with avatar: id, username, displayName, kind, avatarUrl */
 export const USER_WITH_AVATAR_SELECT = {
   id: true,
   username: true,
   displayName: true,
+  kind: true,
   avatarUrl: true,
 } as const;
 

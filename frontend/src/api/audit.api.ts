@@ -1,3 +1,5 @@
+import type { UserKind } from '@/lib/types';
+
 import { get } from './client';
 
 export interface AuditLogEntry {
@@ -6,6 +8,8 @@ export interface AuditLogEntry {
   userId: string | null;
   /** Null for a row without a user, and for a user who has since been removed */
   userName: string | null;
+  /** The kind of that user, null like userName */
+  userKind: UserKind | null;
   action: string;
   resource: string;
   details: Record<string, unknown> | null;

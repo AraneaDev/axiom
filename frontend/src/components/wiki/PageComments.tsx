@@ -25,6 +25,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { UserName } from '@/components/ui/UserName';
 import type { PageComment } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -260,7 +261,9 @@ export function PageComments({ pageId }: PageCommentsProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Avatar name={comment.user.displayName} size="sm" />
-                <span className="text-sm font-medium text-text">{comment.user.displayName}</span>
+                <span className="text-sm font-medium text-text">
+                  <UserName user={comment.user} />
+                </span>
                 <span className="text-xs text-text-tertiary">
                   {formatRelative(comment.createdAt)}
                 </span>
@@ -360,7 +363,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
                     <div className="flex items-center gap-2">
                       <Avatar name={comment.user.displayName} size="sm" />
                       <span className="text-sm font-medium text-text">
-                        {comment.user.displayName}
+                        <UserName user={comment.user} />
                       </span>
                       <span className="text-xs text-text-tertiary">
                         {formatRelative(comment.createdAt)}

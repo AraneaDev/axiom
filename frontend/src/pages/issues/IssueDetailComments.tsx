@@ -11,10 +11,10 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
+import { UserName } from '@/components/ui/UserName';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import { authorName } from '@/lib/authors';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -157,11 +157,11 @@ export function IssueDetailComments({
                       to={`/${orgSlug}/${teamSlug}/members/${comment.author.username}`}
                       className="text-sm font-medium text-text hover:text-primary transition-colors"
                     >
-                      {comment.author.displayName}
+                      <UserName user={comment.author} />
                     </Link>
                   ) : (
                     <span className="text-sm font-medium text-text">
-                      {authorName(comment.author, comment.externalAuthorLogin)}
+                      <UserName user={comment.author} externalLogin={comment.externalAuthorLogin} />
                     </span>
                   )}
                   <span className="text-xs text-text-tertiary">

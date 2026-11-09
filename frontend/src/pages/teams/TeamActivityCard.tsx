@@ -4,7 +4,9 @@ import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+import { UserName } from '@/components/ui/UserName';
 import { ViaLabel } from '@/components/ui/ViaLabel';
+import type { UserKind } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -34,6 +36,7 @@ interface ActivityItem {
   user: {
     displayName: string;
     username: string;
+    kind?: UserKind;
     avatarUrl?: string | null;
   };
 }
@@ -98,7 +101,7 @@ export function TeamActivityCard({ activity, orgSlug, teamSlug }: TeamActivityCa
                       to={`/${orgSlug}/${teamSlug}/members/${a.user.username}`}
                       className="font-medium text-text hover:text-primary transition-colors"
                     >
-                      {a.user.displayName}
+                      <UserName user={a.user} />
                     </Link>{' '}
                     <ViaLabel via={a.via} />{' '}
                     <span className="text-text-secondary">{actionLabel}</span>{' '}

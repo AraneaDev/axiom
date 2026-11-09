@@ -190,18 +190,24 @@ export async function deleteTeam(teamId: string) {
 /**
  * List all members of a team with user details.
  * @param teamId - The team ID
+ * @param opts - What to list
+ * @param opts.includeBots - Its service accounts too, for the member list; never for a picker
  * @returns Array of team memberships with user details
  * @throws {AppError} 404 if team not found
  */
-export async function listTeamMembers(teamId: string) {
+export async function listTeamMembers(teamId: string, opts: { includeBots?: boolean } = {}) {
   const team = await findOrThrow(
     prisma.team.findUnique({ where: { id: teamId } }),
     ERR.TEAM_NOT_FOUND,
   );
 
   return prisma.teamMembership.findMany({
-    // People only, as in getTeam: a bot is never offered as a member
-    where: { teamId, user: { kind: 'PERSON' } },
+    // People only by default, as in getTeam: a bot is never offered in a picker. The member list
+    // asks for bots too, and marks them
+    where: {
+      teamId,
+      user: { kind: opts.includeBots ? { in: ['PERSON', 'SERVICE'] } : 'PERSON' },
+    },
     include: {
       user: {
         select: {

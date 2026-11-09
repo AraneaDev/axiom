@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { UserName } from '@/components/ui/UserName';
 import { useModalState } from '@/hooks/useModalState';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useTeamContext } from '@/hooks/useTeamContext';
@@ -44,15 +45,20 @@ export default function TeamMembers() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('MEMBER');
 
+  // The member list shows the team's bots too, marked; pickers read the people-only team.get
   const {
-    data: teamDetail,
+    data: members = [],
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['team', currentTeam?.id],
-    queryFn: () => teamsApi.get(currentTeam!.id),
+    queryKey: ['team-members', currentTeam?.id],
+    queryFn: () => teamsApi.listMembers(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
+  const memberKeys = [
+    ['team', currentTeam?.id],
+    ['team-members', currentTeam?.id],
+  ];
 
   const { data: invitations } = useQuery({
     queryKey: ['invitations', currentOrg?.id, currentTeam?.id],
@@ -66,13 +72,13 @@ export default function TeamMembers() {
 
   const removeMutation = useMutationWithToast(
     (memberId: string) => teamsApi.removeMember(currentTeam!.id, memberId),
-    { successMessage: null, invalidateKeys: [['team', currentTeam?.id]] },
+    { successMessage: null, invalidateKeys: memberKeys },
   );
 
   const roleMutation = useMutationWithToast(
     ({ memberId, role }: { memberId: string; role: string }) =>
       teamsApi.updateMemberRole(currentTeam!.id, memberId, role),
-    { successMessage: null, invalidateKeys: [['team', currentTeam?.id]] },
+    { successMessage: null, invalidateKeys: memberKeys },
   );
 
   const inviteMutation = useMutationWithToast(
@@ -131,7 +137,6 @@ export default function TeamMembers() {
     );
   }
 
-  const members = teamDetail?.members ?? [];
   const roleBreakdown = members.reduce(
     (acc: Record<string, number>, m: TeamMember) => {
       const label = ROLE_LABELS[m.role] ?? m.role;
@@ -159,7 +164,9 @@ export default function TeamMembers() {
                   to={`/${org}/${teamSlug}/members/${m.user.username}`}
                   className="flex-1 min-w-0 hover:text-primary transition-colors"
                 >
-                  <p className="font-medium text-sm truncate">{m.user.displayName}</p>
+                  <p className="font-medium text-sm truncate">
+                    <UserName user={m.user} />
+                  </p>
                   <p className="text-xs text-text-secondary">@{m.user.username}</p>
                 </Link>
                 <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>
@@ -172,7 +179,8 @@ export default function TeamMembers() {
                       roleMutation.mutate({ memberId: m.user.id, role: v as string })
                     }
                     options={[
-                      { value: 'ADMIN', label: 'Admin' },
+                      // A bot is at most a member of a team
+                      ...(m.user.kind === 'SERVICE' ? [] : [{ value: 'ADMIN', label: 'Admin' }]),
                       { value: 'MEMBER', label: 'Member' },
                       { value: 'VIEWER', label: 'Viewer' },
                     ]}

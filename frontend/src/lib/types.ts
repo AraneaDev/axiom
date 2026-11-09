@@ -1,5 +1,8 @@
 // Shared frontend types matching backend models
 
+/** What a user is: a person, the GitHub integration user, or a service account (a bot) */
+export type UserKind = 'PERSON' | 'SERVICE' | 'INTEGRATION';
+
 export interface User {
   id: string;
   email: string;
@@ -39,6 +42,7 @@ export interface TeamMember {
     id: string;
     username: string;
     displayName: string;
+    kind?: UserKind;
     avatarUrl?: string;
     isAdmin?: boolean;
     orgMemberships?: { orgId: string; role: string }[];
@@ -113,8 +117,8 @@ export interface Issue {
   body: string;
   type: 'TASK' | 'BUG' | 'STORY' | 'EPIC';
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  assignee?: { id: string; username: string; displayName: string };
-  creator: { id: string; username: string; displayName: string };
+  assignee?: { id: string; username: string; displayName: string; kind?: UserKind };
+  creator: { id: string; username: string; displayName: string; kind?: UserKind };
   /** The GitHub login of an imported issue's author, when the creator is the integration user */
   externalAuthorLogin?: string | null;
   labels: Label[];
@@ -178,7 +182,7 @@ export interface Label {
 export interface Comment {
   id: string;
   body: string;
-  author: { id: string; username: string; displayName: string };
+  author: { id: string; username: string; displayName: string; kind?: UserKind };
   /** The GitHub login of an imported comment's author, when the author is the integration user */
   externalAuthorLogin?: string | null;
   createdAt: string;
@@ -299,7 +303,7 @@ export interface PageComment {
   id: string;
   pageId: string;
   userId: string;
-  user: { id: string; username: string; displayName: string };
+  user: { id: string; username: string; displayName: string; kind?: UserKind };
   body: string;
   anchorText?: string;
   resolved: boolean;

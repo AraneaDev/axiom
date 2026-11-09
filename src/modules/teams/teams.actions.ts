@@ -10,6 +10,8 @@ import {
   createTeamSchema,
   firstQueryText,
   queryCount,
+  queryFlag,
+  queryFlagSet,
 } from '../../utils/validation';
 import { teamRoleValidator } from '../../utils/validation/common-validators';
 
@@ -87,13 +89,16 @@ registerActions([
     name: 'teamMember.list',
     area: 'teams',
     kind: 'read',
-    summary: 'List the members of a team with their roles',
+    summary:
+      'List the members of a team with their roles: people only, or with includeBots its ' +
+      'service accounts too',
     target: teamTarget,
-    input: teamTarget,
+    input: teamTarget.extend({ includeBots: queryFlag }),
     output: z.array(record),
     rest: { method: 'GET', path: '/api/teams/:teamId/members' },
     authorize: teamRead<z.infer<typeof teamTarget>>((input) => input.teamId),
-    handler: async (_ctx, { teamId }) => teamsService.listTeamMembers(teamId),
+    handler: async (_ctx, { teamId, includeBots }) =>
+      teamsService.listTeamMembers(teamId, { includeBots: queryFlagSet(includeBots) }),
   }),
   defineAction({
     name: 'team.create',

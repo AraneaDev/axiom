@@ -304,6 +304,21 @@ export const queryCount = z
 export const queryText = z.union([z.string(), z.array(z.string())]).optional();
 
 /**
+ * A yes-or-no switch in a query: `true` from an MCP caller, or the text `true`, possibly
+ * repeated. Read it with `queryFlagSet`; anything else reads as off.
+ */
+export const queryFlag = z.union([z.boolean(), z.string(), z.array(z.string())]).optional();
+
+/**
+ * Whether a parsed queryFlag is on: true, or the text "true" (the first of a repeated value).
+ * @param value - A parsed queryFlag
+ */
+export function queryFlagSet(value: boolean | string | string[] | undefined): boolean {
+  if (typeof value === 'boolean') return value;
+  return firstQueryText(value) === 'true';
+}
+
+/**
  * The text of a query value: a number as its digits, a repeated value as its first.
  * So 0 and "0" read alike.
  * @param value - A parsed queryCount

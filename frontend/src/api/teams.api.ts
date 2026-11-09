@@ -1,4 +1,4 @@
-import type { Team } from '@/lib/types';
+import type { Team, TeamMember } from '@/lib/types';
 
 import { get, post, patch, del } from './client';
 
@@ -17,6 +17,12 @@ export const teamsApi = {
    * @param teamId
    */
   get: (teamId: string) => get<Team>(`/teams/${teamId}`),
+  /**
+   * The members of a team for its member list: its service accounts too, each with its kind.
+   * Pickers read `get` instead, which lists people only.
+   * @param teamId
+   */
+  listMembers: (teamId: string) => get<TeamMember[]>(`/teams/${teamId}/members?includeBots=true`),
   /**
    * Create a new team in an organization.
    * @param orgId

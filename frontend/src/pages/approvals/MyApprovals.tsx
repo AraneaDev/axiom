@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
+import { UserName } from '@/components/ui/UserName';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 
@@ -98,7 +99,9 @@ export default function MyApprovals() {
                       </span>
                     </div>
                   </Td>
-                  <Td className="text-sm text-text-secondary">{req.requestedBy.displayName}</Td>
+                  <Td className="text-sm text-text-secondary">
+                    <UserName user={req.requestedBy} />
+                  </Td>
                   <Td className="text-sm text-text-tertiary">{formatRelative(req.createdAt)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-1.5">

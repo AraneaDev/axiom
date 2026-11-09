@@ -8,6 +8,8 @@ import {
   addOrgMemberSchema,
   createInviteLinkSchema,
   createOrgSchema,
+  queryFlag,
+  queryFlagSet,
   updateOrgSchema,
 } from '../../utils/validation';
 
@@ -107,13 +109,16 @@ registerActions([
     name: 'orgMember.list',
     area: 'orgs',
     kind: 'read',
-    summary: 'List the members of an organization with their roles; members only, as it has emails',
+    summary:
+      'List the members of an organization with their roles; members only, as it has emails. ' +
+      'People only, or with includeBots its service accounts too',
     target: orgTarget,
-    input: orgTarget,
+    input: orgTarget.extend({ includeBots: queryFlag }),
     output: z.array(record),
     rest: { method: 'GET', path: '/api/orgs/:orgId/members' },
     authorize: orgMember<z.infer<typeof orgTarget>>((input) => input.orgId),
-    handler: async (_ctx, { orgId }) => orgsService.listOrgMembers(orgId),
+    handler: async (_ctx, { orgId, includeBots }) =>
+      orgsService.listOrgMembers(orgId, { includeBots: queryFlagSet(includeBots) }),
   }),
   defineAction({
     name: 'inviteLink.list',

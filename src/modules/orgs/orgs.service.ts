@@ -172,12 +172,18 @@ export async function deleteOrg(orgId: string) {
 /**
  * List all members of an organization.
  * @param orgId - The organization ID
+ * @param opts - What to list
+ * @param opts.includeBots - Its service accounts too, for a member list; never for a picker
  * @returns List of org memberships with user details
  */
-export async function listOrgMembers(orgId: string) {
+export async function listOrgMembers(orgId: string, opts: { includeBots?: boolean } = {}) {
   return prisma.orgMembership.findMany({
-    // People only: bots are listed with the org's service accounts, never offered in a picker
-    where: { orgId, user: { kind: 'PERSON' } },
+    // People only by default: a picker reads this, and a bot is never offered in one. A member
+    // list asks for bots too, and marks them
+    where: {
+      orgId,
+      user: { kind: opts.includeBots ? { in: ['PERSON', 'SERVICE'] } : 'PERSON' },
+    },
     include: { user: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'asc' },
   });

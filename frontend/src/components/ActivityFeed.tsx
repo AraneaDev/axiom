@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import type { ActivityEvent } from '@/api/activity.api';
+import { UserName } from '@/components/ui/UserName';
 import { ViaLabel } from '@/components/ui/ViaLabel';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -138,7 +139,9 @@ export function ActivityFeed({ activities, className }: ActivityFeedProps) {
               {/* Content */}
               <div className="flex-1 min-w-0 pt-1">
                 <p className="text-sm">
-                  <span className="font-medium text-text">{event.user.displayName}</span>{' '}
+                  <span className="font-medium text-text">
+                    <UserName user={event.user} />
+                  </span>{' '}
                   <ViaLabel via={event.via} />{' '}
                   <span className="text-text-secondary">{config.label}</span>
                   {detailText && <span className="text-text-tertiary"> {detailText}</span>}

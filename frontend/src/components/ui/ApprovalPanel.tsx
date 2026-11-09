@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
+import { UserName } from '@/components/ui/UserName';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -123,7 +124,9 @@ export function ApprovalPanel({ issueId }: ApprovalPanelProps) {
               />
               <span>
                 Requested by{' '}
-                <span className="font-medium text-text">{request.requestedBy.displayName}</span>
+                <span className="font-medium text-text">
+                  <UserName user={request.requestedBy} />
+                </span>
               </span>
               <span className="text-text-tertiary">
                 {new Date(request.createdAt).toLocaleDateString(undefined, {

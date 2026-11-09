@@ -35,6 +35,8 @@ export {
   queryCount,
   firstQueryText,
   queryText,
+  queryFlag,
+  queryFlagSet,
   dbInt,
   listPosition,
   MAX_REORDER,

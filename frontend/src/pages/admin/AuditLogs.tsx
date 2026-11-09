@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
+import { UserName } from '@/components/ui/UserName';
 import { ViaLabel } from '@/components/ui/ViaLabel';
 import { formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -85,7 +86,13 @@ function AuditLogRow({ log }: { log: AuditLogEntry }) {
         <Td>
           <span className="inline-flex items-center gap-1.5">
             <User className="h-3.5 w-3.5 text-text-tertiary" />
-            <span className="text-text font-medium">{log.userName ?? log.userId ?? 'system'}</span>
+            <span className="text-text font-medium">
+              {log.userName ? (
+                <UserName user={{ displayName: log.userName, kind: log.userKind ?? undefined }} />
+              ) : (
+                (log.userId ?? 'system')
+              )}
+            </span>
             <ViaLabel via={log.via} />
           </span>
         </Td>

@@ -80,7 +80,7 @@ export async function listAuditLogs(opts: ListAuditLogsOpts) {
 }
 
 /**
- * Add who did it by name. The table has no relation to users: a log outlives its user, whose
+ * Add who did it by name, and their kind so a bot shows as one. The table has no relation to users: a log outlives its user, whose
  * name then is null and only the id remains.
  * @param logs - The rows
  */
@@ -88,13 +88,13 @@ async function withUserNames<T extends { userId: string | null }>(logs: T[]) {
   const ids = [...new Set(logs.flatMap((log) => (log.userId ? [log.userId] : [])))];
   const users = await prisma.user.findMany({
     where: { id: { in: ids } },
-    select: { id: true, displayName: true },
+    select: { id: true, displayName: true, kind: true },
   });
-  const names = new Map(users.map((user) => [user.id, user.displayName]));
-  return logs.map((log) => ({
-    ...log,
-    userName: (log.userId && names.get(log.userId)) || null,
-  }));
+  const byId = new Map(users.map((user) => [user.id, user]));
+  return logs.map((log) => {
+    const user = log.userId ? byId.get(log.userId) : undefined;
+    return { ...log, userName: user?.displayName || null, userKind: user?.kind ?? null };
+  });
 }
 
 /**

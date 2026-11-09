@@ -2,12 +2,15 @@ import { CheckCircle, XCircle } from 'lucide-react';
 import { forwardRef, type HTMLAttributes } from 'react';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { UserName } from '@/components/ui/UserName';
+import type { UserKind } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface ApprovalVoteCardUser {
   id: string;
   username: string;
   displayName: string;
+  kind?: UserKind;
   avatarUrl: string | null;
 }
 
@@ -43,7 +46,9 @@ export const ApprovalVoteCard = forwardRef<HTMLDivElement, ApprovalVoteCardProps
         <Avatar name={user.displayName} src={user.avatarUrl ?? undefined} size="sm" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-text">{user.displayName}</span>
+            <span className="text-sm font-medium text-text">
+              <UserName user={user} />
+            </span>
             <span
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium leading-none',

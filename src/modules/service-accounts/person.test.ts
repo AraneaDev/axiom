@@ -20,6 +20,7 @@ import {
 } from '../../test/factory';
 import { authGet } from '../../test/helpers';
 import { createApprovalRequestWithTarget } from '../approvals/approvals.service';
+import { listAuditLogs } from '../audit/audit.service';
 import * as authService from '../auth/auth.service';
 import { assertCustomFieldValue } from '../custom-fields/custom-field-values';
 import { GITHUB_INTEGRATION_USER_ID } from '../github/integration-user';
@@ -76,6 +77,7 @@ describe('a SERVICE user is never a person', () => {
 
   afterAll(async () => {
     await cleanupTestContext(ctx);
+    await prisma.auditLog.deleteMany({ where: { userId: botId } });
     await prisma.user.deleteMany({ where: { id: botId } });
   });
 
@@ -148,6 +150,55 @@ describe('a SERVICE user is never a person', () => {
     const ids = (team.body.members as Array<{ userId: string }>).map((m) => m.userId);
     expect(ids).toContain(member.id);
     expect(ids).not.toContain(botId);
+  });
+
+  it('the org and team member lists show the bot, with its kind, only when asked', async () => {
+    const org = await authGet(`/api/orgs/${ctx.orgId}/members?includeBots=true`, ctx.owner.token);
+    expect(org.status).toBe(200);
+    const orgBot = (org.body as Array<{ userId: string; user: { kind: string } }>).find(
+      (m) => m.userId === botId,
+    );
+    expect(orgBot?.user.kind).toBe('SERVICE');
+
+    const team = await authGet(
+      `/api/teams/${ctx.teamId}/members?includeBots=true`,
+      ctx.owner.token,
+    );
+    expect(team.status).toBe(200);
+    const rows = team.body as Array<{ userId: string; user: { kind: string } }>;
+    expect(rows.find((m) => m.userId === botId)?.user.kind).toBe('SERVICE');
+    expect(rows.find((m) => m.userId === member.id)?.user.kind).toBe('PERSON');
+
+    // Without the flag, as the pickers ask, the bot stays out
+    const plain = await authGet(`/api/teams/${ctx.teamId}/members`, ctx.owner.token);
+    expect((plain.body as Array<{ userId: string }>).map((m) => m.userId)).not.toContain(botId);
+  });
+
+  it("a bot's comment, its issue and its activity carry the author's kind", async () => {
+    const res = await authGet(`/api/projects/${ctx.projectId}/issues/1`, ctx.owner.token);
+    expect(res.status).toBe(200);
+    const comments = res.body.comments as Array<{ author: { id: string; kind: string } }>;
+    expect(comments.find((c) => c.author.id === botId)?.author.kind).toBe('SERVICE');
+    expect(res.body.creator.kind).toBe('PERSON');
+
+    await prisma.activity.create({
+      data: { resourceType: 'issue', resourceId: issueId, action: 'commented', userId: botId },
+    });
+    const activity = await authGet(
+      `/api/projects/${ctx.projectId}/issues/1/activity`,
+      ctx.owner.token,
+    );
+    expect(activity.status).toBe(200);
+    const events = activity.body.activities as Array<{ userId: string; user: { kind: string } }>;
+    expect(events.find((e) => e.userId === botId)?.user.kind).toBe('SERVICE');
+  });
+
+  it("the audit log names a bot's kind beside its name", async () => {
+    await prisma.auditLog.create({
+      data: { orgId: ctx.orgId, userId: botId, action: 'update', resource: `issue:${issueId}` },
+    });
+    const { logs } = await listAuditLogs({ userId: botId });
+    expect(logs[0]).toMatchObject({ userName: 'Triage bot', userKind: 'SERVICE' });
   });
 
   it('refuses a bot as a watcher', async () => {
