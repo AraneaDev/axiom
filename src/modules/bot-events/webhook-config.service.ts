@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from 'crypto';
 import { prisma } from '../../config/database';
 import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-box';
 import { AppError } from '../../middleware/errorHandler';
-import { checkTeamRead } from '../../middleware/rbac';
+import { checkProjectAccess } from '../../middleware/requireProjectAccess';
 
 import { assertWebhookUrl } from './webhook-url';
 
@@ -154,13 +154,8 @@ async function issueKeyFor(
   if (typeof key !== 'string' || typeof projectId !== 'string') return null;
   let ok = readable.get(projectId);
   if (!ok) {
-    ok = (async () => {
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-        select: { teamId: true },
-      });
-      return project ? (await checkTeamRead(viewerId, project.teamId)) === 'ok' : false;
-    })();
+    // The rule issue reads use: team membership or site admin, not org admin alone
+    ok = checkProjectAccess(viewerId, projectId).then((access) => access === 'ok');
     readable.set(projectId, ok);
   }
   return (await ok) ? key : null;

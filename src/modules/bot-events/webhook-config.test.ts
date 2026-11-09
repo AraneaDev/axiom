@@ -175,8 +175,7 @@ describe('bot webhook config', () => {
       ];
       const statuses = (await Promise.all(calls)).map((r) => r.status);
       // The bot is "not found" to anyone who may not manage it, as for its tokens
-      expect(statuses.every((s) => s === 404 || s === 403)).toBe(true);
-      expect(new Set(statuses).size).toBe(1);
+      expect(statuses).toEqual([404, 404, 404, 404, 404]);
       expect(await prisma.botWebhook.count({ where: { botId } })).toBe(1);
     });
 
@@ -251,6 +250,40 @@ describe('bot webhook config', () => {
       data: { role: 'MEMBER' },
     });
     await prisma.botEvent.deleteMany({ where: { botId } });
+  });
+
+  it('an org admin not on the project team sees no issue key', async () => {
+    // A second team in the same org, which the admin is not on
+    const team = await prisma.team.create({
+      data: { orgId: ctx.orgId, name: 'Voorbeeld closed team', slug: 'voorbeeld-closed-team' },
+    });
+    const project = await prisma.project.create({
+      data: { teamId: team.id, name: 'Closed', slug: 'closed', prefix: 'CLSD' },
+    });
+    await prisma.botEvent.create({
+      data: {
+        botId,
+        type: 'issue.assigned',
+        payload: { issue: { key: 'CLSD-3' }, project: { id: project.id } },
+      },
+    });
+    await prisma.orgMembership.update({
+      where: { userId_orgId: { userId: member.id, orgId: ctx.orgId } },
+      data: { role: 'ADMIN' },
+    });
+    try {
+      const res = await authGet(path(), member.token);
+      expect(res.status).toBe(200);
+      expect(res.body.deliveries[0].issueKey).toBeNull();
+      expect(JSON.stringify(res.body)).not.toContain('CLSD-3');
+    } finally {
+      await prisma.orgMembership.update({
+        where: { userId_orgId: { userId: member.id, orgId: ctx.orgId } },
+        data: { role: 'MEMBER' },
+      });
+      await prisma.botEvent.deleteMany({ where: { botId } });
+      await prisma.team.delete({ where: { id: team.id } });
+    }
   });
 
   it('delete removes pending events and the webhook', async () => {

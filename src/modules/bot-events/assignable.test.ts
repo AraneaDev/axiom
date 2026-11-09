@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import {
@@ -10,7 +10,9 @@ import {
 import { createRule } from '../automation/automation.service';
 import { GITHUB_INTEGRATION_USER_ID } from '../github/integration-user';
 import { bulkUpdate } from '../issues/issue-bulk.service';
+import { addComment } from '../issues/issue-comments.service';
 import { assertAssignable, isAssignableBot } from '../issues/issue-references';
+import { toggleWatch } from '../issues/issue-watchers.service';
 import { createIssue, updateIssue } from '../issues/issues.service';
 import { createNotification } from '../notifications/notifications.service';
 import { assertPersonTarget } from '../service-accounts/person';
@@ -21,6 +23,36 @@ import {
 import * as teamsService from '../teams/teams.service';
 
 const REFUSAL = 'The assignee must be a member of the project team';
+
+// Notifications and mentions run fire-and-forget; keep their promises so a test can wait for them
+const pending = vi.hoisted(() => [] as Promise<unknown>[]);
+vi.mock('../notifications/notifications.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../notifications/notifications.service')>();
+  return {
+    ...actual,
+    createNotification: vi.fn((...args: Parameters<typeof actual.createNotification>) => {
+      const p = actual.createNotification(...args);
+      pending.push(p);
+      return p;
+    }),
+  };
+});
+vi.mock('../../utils/mention-notifier', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/mention-notifier')>();
+  return {
+    ...actual,
+    notifyMentions: vi.fn((...args: Parameters<typeof actual.notifyMentions>) => {
+      const p = actual.notifyMentions(...args);
+      pending.push(p);
+      return p;
+    }),
+  };
+});
+
+/** Wait until every notification and mention started so far has settled. */
+async function settle(): Promise<void> {
+  while (pending.length > 0) await Promise.allSettled(pending.splice(0));
+}
 
 describe('an active member bot can be assigned', () => {
   let ctx: TestContext;
@@ -110,8 +142,32 @@ describe('an active member bot can be assigned', () => {
 
   it('assigning a bot creates no notification', async () => {
     const issue = await createIssue(ctx.projectId, ctx.owner.id, { title: 'Quiet assign' });
+    vi.mocked(createNotification).mockClear();
     await updateIssue(ctx.projectId, issue.number, { assigneeId: memberBot });
+    await settle();
+    // The assignment notice was attempted, and the guard in createNotification refused it
+    expect(vi.mocked(createNotification).mock.calls.map((c) => c[0])).toContain(memberBot);
     expect(await prisma.notification.count({ where: { userId: memberBot } })).toBe(0);
+  });
+
+  it('a bot cannot watch an issue', async () => {
+    const issue = await createIssue(ctx.projectId, ctx.owner.id, { title: 'No bot watchers' });
+    await expect(toggleWatch(ctx.projectId, issue.number, memberBot)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    expect(await prisma.issueWatcher.count({ where: { userId: memberBot } })).toBe(0);
+  });
+
+  it('a comment mentioning the assigned bot notifies it of nothing', async () => {
+    const issue = await createIssue(ctx.projectId, ctx.owner.id, {
+      title: 'Mention the bot',
+      assigneeId: memberBot,
+    });
+    await settle();
+    await addComment(issue.id, ctx.owner.id, 'Over to you @acme-member-bot-assign');
+    await settle();
+    expect(await prisma.notification.count({ where: { userId: memberBot } })).toBe(0);
+    expect(await prisma.issueWatcher.count({ where: { userId: memberBot } })).toBe(0);
   });
 
   it('createIssue with a bot assignee succeeds', async () => {
