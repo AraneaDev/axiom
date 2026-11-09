@@ -84,4 +84,18 @@ describe('PageHistory', () => {
     expect(screen.getByTitle('Restore to version 1')).toBeInTheDocument();
     expect(screen.queryByTitle('Restore to version 2')).not.toBeInTheDocument();
   });
+
+  it('marks a version a bot wrote', async () => {
+    mockGetPageHistory.mockResolvedValue([
+      {
+        ...version(2, 'EXTERNAL'),
+        author: { id: 'b1', username: 'nightly', displayName: 'Nightly Triage', kind: 'SERVICE' },
+      },
+      version(1, 'EDIT'),
+    ]);
+    mockGetPage.mockResolvedValue({ id: 'p1', title: 'Page', body: 'body 2' });
+    renderHistory();
+    expect(await screen.findByText('Nightly Triage')).toBeInTheDocument();
+    expect(screen.getAllByText('bot')).toHaveLength(1);
+  });
 });

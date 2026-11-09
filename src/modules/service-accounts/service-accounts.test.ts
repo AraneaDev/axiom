@@ -317,6 +317,11 @@ describe('service accounts: the list and the activity of a bot', () => {
   let botId: string;
   let seenIssueId: string;
   let hiddenIssueId: string;
+  let openPageId: string;
+  let secretPageId: string;
+  let spaceId: string;
+  let opsTeamId: string;
+  let hiddenSpaceId: string;
 
   beforeAll(async () => {
     ctx = await createTestContext('svcactivity');
@@ -382,10 +387,49 @@ describe('service accounts: the list and the activity of a bot', () => {
         },
       })
     ).id;
+    hiddenSpaceId = (
+      await prisma.wikiSpace.create({
+        data: { teamId: hiddenTeam.id, name: 'Hidden space', slug: 'hidden-space' },
+      })
+    ).id;
+    // A space of the bot's team; one of its pages is restricted to the org owner alone
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Runbooks', slug: 'runbooks-svcactivity' },
+    });
+    spaceId = space.id;
+    openPageId = (
+      await prisma.page.create({
+        data: { spaceId, title: 'Runbook', slug: 'runbook', body: '' },
+      })
+    ).id;
+    secretPageId = (
+      await prisma.page.create({
+        data: {
+          spaceId,
+          title: 'Secret page',
+          slug: 'secret',
+          body: '',
+          restrictions: { create: { type: 'VIEW', userId: ctx.owner.id } },
+        },
+      })
+    ).id;
+    // A team the owner is in and the bot is not: the bot may join it
+    opsTeamId = (
+      await prisma.team.create({
+        data: {
+          orgId: ctx.orgId,
+          name: 'Ops',
+          slug: 'ops-svcactivity',
+          members: { create: { userId: owner.id, role: 'MEMBER' } },
+        },
+      })
+    ).id;
     await prisma.activity.createMany({
       data: [
         { resourceType: 'issue', resourceId: seenIssueId, action: 'created', userId: botId },
         { resourceType: 'issue', resourceId: hiddenIssueId, action: 'created', userId: botId },
+        { resourceType: 'wiki_page', resourceId: openPageId, action: 'created', userId: botId },
+        { resourceType: 'wiki_page', resourceId: secretPageId, action: 'created', userId: botId },
       ],
     });
     await prisma.apiToken.create({
@@ -442,5 +486,55 @@ describe('service accounts: the list and the activity of a bot', () => {
     const res = await authGet(`/api/service-accounts/${botId}/activity`, stranger.token);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('SERVICE_ACCOUNT_NOT_FOUND');
+  });
+
+  it("an owner sees the bot's page activity, but not a page restricted away from them", async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/activity`, owner.token);
+    expect(res.status).toBe(200);
+    const ids = (res.body as Array<{ resourceId: string }>).map((a) => a.resourceId);
+    expect(ids).toContain(openPageId);
+    expect(ids).not.toContain(secretPageId);
+    const page = res.body.find((a: { resourceId: string }) => a.resourceId === openPageId);
+    expect(page.resourceTitle).toBe('Runbook');
+  });
+
+  it('a platform admin outside the org reads it, issues in every team included', async () => {
+    const platform = await createTestUser({ username: 'voorbeeld-platform-svcactivity' });
+    await prisma.user.update({ where: { id: platform.id }, data: { isAdmin: true } });
+    try {
+      const res = await authGet(`/api/service-accounts/${botId}/activity`, platform.token);
+      expect(res.status).toBe(200);
+      const ids = (res.body as Array<{ resourceId: string }>).map((a) => a.resourceId);
+      expect(ids).toEqual(expect.arrayContaining([seenIssueId, hiddenIssueId, openPageId]));
+    } finally {
+      await prisma.user.delete({ where: { id: platform.id } });
+    }
+  });
+
+  it('get offers the teams and spaces an owner can open and the bot is not in yet', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}`, owner.token);
+    expect(res.status).toBe(200);
+    const teamIds = (res.body.joinable.teams as Array<{ id: string }>).map((t) => t.id);
+    // Ops has its owner; the bot's own team and the team no owner is in are not offered
+    expect(teamIds).toEqual([opsTeamId]);
+    const spaceIds = (res.body.joinable.spaces as Array<{ id: string }>).map((sp) => sp.id);
+    expect(spaceIds).toContain(spaceId);
+    expect(spaceIds).not.toContain(hiddenSpaceId);
+  });
+
+  it("a bot's member profile names its kind", async () => {
+    const res = await authGet(
+      `/api/teams/${ctx.teamId}/members/profile/acme-activity-bot`,
+      owner.token,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.kind).toBe('SERVICE');
+  });
+
+  it('the org member list says who is deactivated, so the owner picker can leave them out', async () => {
+    const res = await authGet(`/api/orgs/${ctx.orgId}/members`, ctx.owner.token);
+    expect(res.status).toBe(200);
+    const row = res.body.find((m: { userId: string }) => m.userId === owner.id);
+    expect(row.user).toHaveProperty('deactivatedAt', null);
   });
 });

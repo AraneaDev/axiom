@@ -3,6 +3,15 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
+// The api client reads its tokens from localStorage when it loads
+vi.hoisted(() => {
+  const store = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+  });
+});
 vi.mock('@/components/editor/MarkdownEditor', () => ({ MarkdownEditor: () => null }));
 vi.mock('@/components/editor/MarkdownRenderer', () => ({
   MarkdownRenderer: ({ content }: { content: string }) => <div>{content}</div>,
@@ -20,6 +29,7 @@ vi.mock('@/stores/auth.store', () => ({
 
 import { ActivityFeed } from '@/components/ActivityFeed';
 import type { Issue } from '@/lib/types';
+import { RecentActivityWidget } from '@/pages/dashboard/DashboardWidgets';
 import { TeamActivityCard } from '@/pages/teams/TeamActivityCard';
 
 import { IssueDetailComments } from './IssueDetailComments';
@@ -162,6 +172,31 @@ describe('the bot marker in issue views', () => {
               resourceType: 'issue',
               createdAt: '2026-01-01T00:00:00Z',
               user: bot,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('bot')).toBeInTheDocument();
+  });
+
+  it('a dashboard activity row by a bot shows the marker', () => {
+    render(
+      <MemoryRouter>
+        <RecentActivityWidget
+          activities={[
+            {
+              id: 'a1',
+              action: 'commented',
+              resourceType: 'issue',
+              resourceId: 'i1',
+              details: null,
+              createdAt: '2026-01-01T00:00:00Z',
+              via: null,
+              user: { ...bot, avatarUrl: null },
+              resourceTitle: 'Stale ticket',
+              resourceLink: null,
+              resourceKey: 'AXM-1',
             },
           ]}
         />

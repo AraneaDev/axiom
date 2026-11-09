@@ -28,9 +28,10 @@ import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { UserName } from '@/components/ui/UserName';
 import { PageRestrictions } from '@/components/wiki/PageRestrictions';
 import { StarButton } from '@/components/wiki/StarButton';
-import type { PageRestriction } from '@/lib/types';
+import type { PageRestriction, UserKind } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
 interface PageCrumb {
@@ -144,7 +145,7 @@ interface PageViewHeaderProps {
     title: string;
     slug: string;
     parent?: PageCrumb;
-    versions?: { createdAt: string; author?: { displayName: string } }[];
+    versions?: { createdAt: string; author?: { displayName: string; kind?: UserKind } }[];
     restrictions?: PageRestriction[];
   };
   basePath: string;
@@ -303,7 +304,9 @@ export function PageViewHeader({
       {page.versions?.[0] && (
         <p className="text-xs text-text-tertiary mb-4">
           Last edited {formatRelative(page.versions[0].createdAt)} by{' '}
-          <span className="text-text-secondary">{page.versions[0].author?.displayName}</span>
+          <span className="text-text-secondary">
+            <UserName user={page.versions[0].author} />
+          </span>
         </p>
       )}
     </>

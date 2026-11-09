@@ -12,6 +12,7 @@ import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
 import { viewablePageIdFilter, viewableProjectIds } from '../search/search-access';
 import { withResourceLinks } from '../teams/teams.service';
 import { generateApiToken } from '../users/users.service';
+import { canAccessSpace } from '../wiki/space-access';
 
 import { assertPlacesKept, lockEligibleOwners, lockServiceAccount } from './bot-guards';
 import { eligibleOwnerIds, eligibleOwnerWhere } from './owners';
@@ -377,6 +378,50 @@ export async function describeServiceAccount(id: string) {
     spaces: spaces.map((s) => ({ ...s.space, level: s.level })),
     tokens,
   };
+}
+
+/**
+ * Where a bot may be added (decision 9): the teams of its org one of its owners is in, and the
+ * spaces one of them can open, that it is not in yet. Spaces are only those the viewer can open
+ * too, so no name reaches someone who can't see it. The member and permission actions still
+ * decide; this only says what to offer.
+ * @param id - The bot's user id
+ * @param viewerId - Who reads
+ */
+export async function joinablePlaces(id: string, viewerId: string) {
+  const account = await getServiceAccount(id);
+  if (!account) throw NOT_FOUND();
+  const owners = await eligibleOwnerIds(id);
+  if (owners.length === 0) return { teams: [], spaces: [] };
+  const [teams, spaces] = await Promise.all([
+    prisma.team.findMany({
+      where: {
+        orgId: account.orgId,
+        members: { some: { userId: { in: owners } }, none: { userId: id } },
+      },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.wikiSpace.findMany({
+      where: {
+        team: { orgId: account.orgId },
+        isArchived: false,
+        permissions: { none: { userId: id } },
+      },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
+  const open = await Promise.all(
+    spaces.map(async (space) => {
+      if (!(await canAccessSpace(space.id, viewerId, 'VIEW'))) return false;
+      for (const owner of owners) {
+        if (await canAccessSpace(space.id, owner, 'VIEW')) return true;
+      }
+      return false;
+    }),
+  );
+  return { teams, spaces: spaces.filter((_, i) => open[i]) };
 }
 
 /**

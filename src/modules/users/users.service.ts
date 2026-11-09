@@ -116,7 +116,7 @@ export async function getDashboard(userId: string) {
     prisma.activity.findMany({
       where: { userId },
       include: {
-        user: { select: { id: true, displayName: true, username: true, avatarUrl: true } },
+        user: { select: USER_WITH_AVATAR_SELECT },
       },
       orderBy: { createdAt: 'desc' },
       take: 10,

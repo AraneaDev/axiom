@@ -49,10 +49,19 @@ export interface ServiceAccountToken {
   createdAt: string;
 }
 
+/** A team or space the bot may join: one of its owners can open it, and it is not there yet */
+export interface JoinablePlace {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 /** One bot with its places and tokens */
 export interface ServiceAccountDetail extends Omit<ServiceAccountSummary, 'lastUsedAt'> {
   spaces: { id: string; name: string; slug: string; level: string }[];
   tokens: ServiceAccountToken[];
+  /** Only on a read of the bot itself, not on what a change answers */
+  joinable?: { teams: JoinablePlace[]; spaces: JoinablePlace[] };
 }
 
 /** One activity of a bot, with the issue or page it is about */
@@ -102,6 +111,11 @@ const MESSAGES: Record<string, string> = {
   SERVICE_ACCOUNT_TOKEN_ELSEWHERE: "A bot's tokens are made on its own page.",
   SERVICE_ACCOUNT_USE_SUSPEND: 'A bot is not deactivated. Suspend it on its page instead.',
   SERVICE_ACCOUNT_NO_USER_POLICY: "A bot has no rules of its own: its org's rules hold.",
+  SERVICE_ACCOUNT_DEACTIVATED: 'The service account that asked for this was deleted.',
+  SERVICE_ACCOUNT_NOT_APPROVER: 'A bot cannot approve or be asked to approve.',
+  SERVICE_ACCOUNT_NOT_ASSIGNABLE: 'A bot cannot be assigned an issue.',
+  SERVICE_ACCOUNT_NOT_INVITABLE: 'A bot cannot be invited or added to an organization.',
+  SERVICE_ACCOUNT_NOT_WATCHER: 'A bot cannot watch an issue.',
   USERNAME_TAKEN: 'That username is taken.',
   FORBIDDEN: 'Only an org owner or admin can do this.',
   UI_ONLY: 'This can only be done in the web UI, never with a token.',

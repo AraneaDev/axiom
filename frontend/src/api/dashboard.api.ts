@@ -1,3 +1,5 @@
+import type { UserKind } from '@/lib/types';
+
 import { get } from './client';
 
 export interface DashboardIssue {
@@ -33,7 +35,13 @@ export interface DashboardActivity {
   details: Record<string, unknown> | null;
   createdAt: string;
   via: string | null;
-  user: { id: string; displayName: string; username: string; avatarUrl: string | null };
+  user: {
+    id: string;
+    displayName: string;
+    username: string;
+    avatarUrl: string | null;
+    kind?: UserKind;
+  };
   resourceTitle: string | null;
   resourceLink: string | null;
   resourceKey: string | null;

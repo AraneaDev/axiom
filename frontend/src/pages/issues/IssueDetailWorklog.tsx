@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Progress } from '@/components/ui/Progress';
 import { Spinner } from '@/components/ui/Spinner';
+import { UserName } from '@/components/ui/UserName';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { Issue } from '@/lib/types';
@@ -211,7 +212,9 @@ export function IssueDetailWorklog({
                     <Avatar name={w.user.displayName} size="xs" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium truncate">{w.user.displayName}</span>
+                        <span className="font-medium truncate">
+                          <UserName user={w.user} />
+                        </span>
                         <span className="text-text-tertiary shrink-0 ml-1">
                           {formatMinutes(w.minutes)}
                         </span>

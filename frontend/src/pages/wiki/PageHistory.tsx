@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Spinner';
+import { UserName } from '@/components/ui/UserName';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageVersionKind } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
@@ -153,7 +154,9 @@ export default function PageHistory() {
             </div>
             <div className="flex items-center gap-2">
               <Avatar name={v.author.displayName} size="sm" />
-              <span className="text-sm text-text-secondary">{v.author.displayName}</span>
+              <span className="text-sm text-text-secondary">
+                <UserName user={v.author} />
+              </span>
             </div>
             {!isHead(v) && (
               <Button

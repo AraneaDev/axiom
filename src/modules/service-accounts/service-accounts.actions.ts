@@ -61,13 +61,18 @@ registerActions([
     name: 'serviceAccount.get',
     area: 'orgs',
     kind: 'read',
-    summary: 'Read one service account: status, owners, memberships and tokens',
+    summary:
+      'Read one service account: status, owners, memberships, tokens, and the teams and spaces ' +
+      'it may join (joinable)',
     target: botTarget,
     input: botTarget,
     output: record,
     rest: { method: 'GET', path: '/api/service-accounts/:id' },
     authorize: async (ctx, { id }) => service.assertCanAccess(ctx.userId, id, 'read'),
-    handler: async (_ctx, { id }) => service.describeServiceAccount(id),
+    handler: async (ctx, { id }) => ({
+      ...(await service.describeServiceAccount(id)),
+      joinable: await service.joinablePlaces(id, ctx.userId),
+    }),
   }),
   defineAction({
     name: 'serviceAccount.activity',

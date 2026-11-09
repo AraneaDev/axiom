@@ -17,8 +17,8 @@ interface ServiceAccountOwnerPickerProps {
 }
 
 /**
- * Pick a bot's owners: people in its org with role member or above. The member list holds people
- * only, so no bot is offered.
+ * Pick a bot's owners: people in its org with role member or above who are not deactivated. The
+ * member list holds people only, so no bot is offered.
  * @param props - The org, the picked ids and the change handler
  * @param props.orgId - The bot's org
  * @param props.selected - The ids picked
@@ -35,7 +35,7 @@ export function ServiceAccountOwnerPicker({
     queryFn: () => orgsApi.listMembers(orgId),
   });
 
-  const eligible = (members ?? []).filter((m) => OWNER_ROLES.has(m.role));
+  const eligible = (members ?? []).filter((m) => OWNER_ROLES.has(m.role) && !m.user.deactivatedAt);
   const needle = filter.trim().toLowerCase();
   const shown = needle
     ? eligible.filter(

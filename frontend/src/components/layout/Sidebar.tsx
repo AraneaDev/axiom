@@ -17,6 +17,7 @@ import { NavLink, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
+import { serviceAccountsApi } from '@/api/service-accounts.api';
 import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { usePendingAgentApprovals } from '@/hooks/usePendingAgentApprovals';
@@ -110,6 +111,19 @@ export function Sidebar() {
   });
   const currentOrg = orgs?.find((o) => o.slug === org);
 
+  // Org settings are for who manages the org's bots, and for a member who owns one there. A
+  // viewer or guest can own none, so they are not asked about
+  const managesOrg =
+    !!user?.isAdmin || currentOrg?.role === 'OWNER' || currentOrg?.role === 'ADMIN';
+  const { data: ownBots } = useQuery({
+    queryKey: ['service-accounts', currentOrg?.id],
+    queryFn: () => serviceAccountsApi.list(currentOrg!.id),
+    enabled: !!currentOrg?.id && !managesOrg && currentOrg?.role === 'MEMBER',
+    retry: false,
+    staleTime: STABLE_STALE_TIME,
+  });
+  const showOrgSettings = managesOrg || (ownBots?.length ?? 0) > 0;
+
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
@@ -201,7 +215,9 @@ export function Sidebar() {
           {currentOrg && (
             <div className="space-y-1">
               <NavItem to={`/${org}/approvals`} icon={ShieldCheck} label="My Approvals" />
-              <NavItem to={`/${org}/settings`} icon={Settings} label="Org settings" />
+              {showOrgSettings && (
+                <NavItem to={`/${org}/settings`} icon={Settings} label="Org settings" />
+              )}
               <NavItem
                 to="/approvals/agent"
                 icon={Bot}

@@ -17,8 +17,17 @@ export function useOrgOfPage() {
   const user = useAuthStore((s) => s.user);
   const { data: orgs, isLoading } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
   const org = orgs?.find((o) => o.slug === slug);
-  const isAdmin = !!user?.isAdmin || org?.role === 'OWNER' || org?.role === 'ADMIN';
-  return { slug, org, isAdmin, isLoading };
+  const isAdmin = managesBots(org?.role, user?.isAdmin);
+  return { slug, org, orgs, isAdmin, isLoading, isPlatformAdmin: !!user?.isAdmin };
+}
+
+/**
+ * Whether a viewer manages an org's bots: an org OWNER or ADMIN, or a platform admin.
+ * @param role - The viewer's role in the org, if a member
+ * @param isPlatformAdmin - Whether the viewer is a platform admin
+ */
+export function managesBots(role: string | undefined, isPlatformAdmin = false) {
+  return isPlatformAdmin || role === 'OWNER' || role === 'ADMIN';
 }
 
 /**

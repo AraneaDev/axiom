@@ -18,6 +18,7 @@ import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { UserName } from '@/components/ui/UserName';
 import { ViaLabel } from '@/components/ui/ViaLabel';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { formatDate, formatRelative } from '@/lib/utils';
@@ -76,7 +77,9 @@ export default function MemberProfile() {
             <div className="flex items-center gap-4">
               <Avatar name={profile.displayName} src={profile.avatarUrl ?? undefined} size="lg" />
               <div>
-                <h1 className="h2">{profile.displayName}</h1>
+                <h1 className="h2">
+                  <UserName user={profile} />
+                </h1>
                 <p className="text-sm text-text-secondary">@{profile.username}</p>
               </div>
               <div className="ml-auto">
@@ -107,7 +110,9 @@ export default function MemberProfile() {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">
-                        <span className="font-medium">{a.user.displayName}</span>{' '}
+                        <span className="font-medium">
+                          <UserName user={a.user} />
+                        </span>{' '}
                         <ViaLabel via={a.via} />{' '}
                         <span className="text-text-secondary">{a.action}</span>{' '}
                         <span className="text-text-secondary">{a.resourceType?.toLowerCase()}</span>

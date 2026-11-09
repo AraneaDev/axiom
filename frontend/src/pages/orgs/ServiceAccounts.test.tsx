@@ -137,6 +137,16 @@ describe('ServiceAccounts', () => {
         role: 'GUEST',
         user: { id: 'u-guest', username: 'gast', displayName: 'Gast Voorbeeld' },
       },
+      {
+        userId: 'u-gone',
+        role: 'MEMBER',
+        user: {
+          id: 'u-gone',
+          username: 'weg',
+          displayName: 'Weg Voorbeeld',
+          deactivatedAt: '2026-10-01T00:00:00Z',
+        },
+      },
     ]);
     api.create.mockResolvedValue(bot({ id: 'bot-new' }));
     show('ADMIN');
@@ -152,6 +162,8 @@ describe('ServiceAccounts', () => {
     // A guest can't own a bot, so the picker leaves them out
     expect(await screen.findByLabelText(/Jan Voorbeeld/)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Gast Voorbeeld/)).toBeNull();
+    // Nor can a deactivated person
+    expect(screen.queryByLabelText(/Weg Voorbeeld/)).toBeNull();
     fireEvent.click(screen.getByLabelText(/Jan Voorbeeld/));
     fireEvent.click(screen.getByRole('button', { name: /^Create$/ }));
 

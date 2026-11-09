@@ -1,3 +1,5 @@
+import type { UserKind } from '@/lib/types';
+
 import { get, put, del } from './client';
 
 export interface SpacePermission {
@@ -12,6 +14,7 @@ export interface SpacePermission {
     username: string;
     displayName: string;
     avatarUrl: string | null;
+    kind?: UserKind;
   } | null;
 }
 

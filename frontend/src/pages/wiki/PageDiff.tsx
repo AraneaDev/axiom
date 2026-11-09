@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
+import { UserName } from '@/components/ui/UserName';
 import { cn, formatDate } from '@/lib/utils';
 
 import { useWikiContext } from './WikiLayout';
@@ -80,7 +81,9 @@ export default function PageDiff() {
               </div>
               <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <Avatar name={diff.from.author.displayName} size="sm" />
-                <span>{diff.from.author.displayName}</span>
+                <span>
+                  <UserName user={diff.from.author} />
+                </span>
                 <span>{formatDate(diff.from.createdAt)}</span>
               </div>
               {diff.from.changeDescription && (
@@ -96,7 +99,9 @@ export default function PageDiff() {
               </div>
               <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <Avatar name={diff.to.author.displayName} size="sm" />
-                <span>{diff.to.author.displayName}</span>
+                <span>
+                  <UserName user={diff.to.author} />
+                </span>
                 <span>{formatDate(diff.to.createdAt)}</span>
               </div>
               {diff.to.changeDescription && (

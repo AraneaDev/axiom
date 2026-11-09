@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { Table, TableContainer, Thead, Tbody, Tr, TrHead, Th, Td } from '@/components/ui/Table';
 import { TeamMemberPicker } from '@/components/ui/TeamMemberPicker';
+import { UserName } from '@/components/ui/UserName';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 const LEVELS = ['VIEW', 'EDIT', 'ADMIN'] as const;
@@ -136,7 +137,9 @@ export function SpacePermissions({ spaceId, teamId }: SpacePermissionsProps) {
                           src={perm.user.avatarUrl ?? undefined}
                           size="xs"
                         />
-                        <span className="text-text font-medium">{perm.user.displayName}</span>
+                        <span className="text-text font-medium">
+                          <UserName user={perm.user} />
+                        </span>
                         <span className="text-text-tertiary text-xs">@{perm.user.username}</span>
                       </div>
                     ) : (

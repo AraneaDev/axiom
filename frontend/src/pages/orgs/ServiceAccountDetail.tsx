@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   Bot,
   Check,
   Clock,
@@ -9,6 +10,7 @@ import {
   PauseCircle,
   Pencil,
   PlayCircle,
+  Plus,
   ShieldCheck,
   Trash2,
   UserPlus,
@@ -16,21 +18,26 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
 import { agentApprovalsApi } from '@/api/agent-approvals.api';
 import {
   serviceAccountError,
   serviceAccountsApi,
+  type JoinablePlace,
   type ServiceAccountDetail as Detail,
 } from '@/api/service-accounts.api';
+import { spacePermissionsApi } from '@/api/space-permissions.api';
+import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Textarea } from '@/components/ui/Textarea';
@@ -38,7 +45,12 @@ import { ViaLabel } from '@/components/ui/ViaLabel';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate, formatRelative } from '@/lib/utils';
 
-import { isOrphaned, ServiceAccountStatusBadge, useOrgOfPage } from './service-account-shared';
+import {
+  isOrphaned,
+  managesBots,
+  ServiceAccountStatusBadge,
+  useOrgOfPage,
+} from './service-account-shared';
 import { ServiceAccountOwnerPicker } from './ServiceAccountOwnerPicker';
 
 /** What an activity's action reads as, after the bot's name */
@@ -67,7 +79,7 @@ function plural(count: number, word: string) {
  */
 export default function ServiceAccountDetail() {
   const { id = '' } = useParams();
-  const { slug, org, isAdmin } = useOrgOfPage();
+  const { slug: pageSlug, orgs, isPlatformAdmin } = useOrgOfPage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const key = ['service-account', id];
@@ -82,15 +94,25 @@ export default function ServiceAccountDetail() {
     enabled: !!id,
   });
 
+  // Rights and links follow the bot's own org, whatever org the address names
+  const org = bot ? orgs?.find((o) => o.id === bot.orgId) : undefined;
+  const slug = org?.slug ?? pageSlug;
+  const isAdmin = managesBots(org?.role, isPlatformAdmin);
+
   const [confirm, setConfirm] = useState<'suspend' | 'resume' | 'delete' | null>(null);
   // The owners being edited, or null: "Add an owner" on an orphan opens the same editor
   const [ownersDraft, setOwnersDraft] = useState<string[] | null>(null);
 
+  // A change answers without what the bot may join: keep that until the read comes back
   const onChanged = (next: Detail) => {
-    queryClient.setQueryData(key, next);
+    queryClient.setQueryData<Detail>(key, (old) => ({ ...next, joinable: old?.joinable }));
+    void queryClient.invalidateQueries({ queryKey: key });
     void queryClient.invalidateQueries({ queryKey: ['service-accounts'] });
   };
+  const reload = () => void queryClient.invalidateQueries({ queryKey: key });
 
+  // A refused action closes its dialog, so the reason shows on the page
+  const closeOnError = () => setConfirm(null);
   const suspend = useMutationWithToast(() => serviceAccountsApi.suspend(id), {
     successMessage: 'Service account suspended',
     errorMessage: null,
@@ -98,6 +120,7 @@ export default function ServiceAccountDetail() {
       setConfirm(null);
       onChanged(next);
     },
+    onError: closeOnError,
   });
   const resume = useMutationWithToast(() => serviceAccountsApi.resume(id), {
     successMessage: 'Service account resumed',
@@ -106,6 +129,7 @@ export default function ServiceAccountDetail() {
       setConfirm(null);
       onChanged(next);
     },
+    onError: closeOnError,
   });
   const remove = useMutationWithToast(() => serviceAccountsApi.delete(id), {
     successMessage: 'Service account deleted',
@@ -115,7 +139,14 @@ export default function ServiceAccountDetail() {
       setConfirm(null);
       navigate(`/${slug}/settings/service-accounts`);
     },
+    onError: closeOnError,
   });
+  const actions = [suspend, resume, remove];
+  // Each attempt clears what an earlier one left on the page
+  const run = (action: (typeof actions)[number]) => {
+    for (const other of actions) if (other !== action) other.reset();
+    action.mutate();
+  };
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (error || !bot) {
@@ -133,6 +164,10 @@ export default function ServiceAccountDetail() {
     );
   }
 
+  if (org && org.slug !== pageSlug) {
+    return <Navigate to={`/${org.slug}/settings/service-accounts/${bot.id}`} replace />;
+  }
+
   const orphaned = isOrphaned(bot);
   const suspended = bot.status === 'SUSPENDED';
   const actionError = suspend.error ?? resume.error ?? remove.error;
@@ -140,14 +175,15 @@ export default function ServiceAccountDetail() {
   return (
     <SettingsPage
       title={bot.displayName}
-      description={`@${bot.username} · service account in ${org?.name ?? slug}`}
+      description={`@${bot.username}, service account in ${org?.name ?? slug}`}
       icon={Bot}
       actions={
         <>
           <ButtonLink to={`/${slug}/settings/service-accounts`} variant="ghost" size="sm">
             <ArrowLeft className="h-3.5 w-3.5" /> All
           </ButtonLink>
-          {bot.status === 'ACTIVE' && (
+          {/* An orphan suspended by hand stays suspended when it gets a new owner */}
+          {(bot.status === 'ACTIVE' || orphaned) && (
             <Button variant="secondary" size="sm" onClick={() => setConfirm('suspend')}>
               <PauseCircle className="h-3.5 w-3.5" /> Suspend
             </Button>
@@ -186,7 +222,7 @@ export default function ServiceAccountDetail() {
             onDraftChange={setOwnersDraft}
             onChanged={onChanged}
           />
-          <MembershipsCard bot={bot} orgSlug={slug} />
+          <MembershipsCard bot={bot} orgSlug={slug} onAdded={reload} />
           <RequestsCard botId={bot.id} />
         </div>
       </div>
@@ -194,17 +230,21 @@ export default function ServiceAccountDetail() {
       <ConfirmDialog
         open={confirm === 'suspend'}
         onClose={() => setConfirm(null)}
-        onConfirm={() => suspend.mutate()}
+        onConfirm={() => run(suspend)}
         loading={suspend.isPending}
         variant="warning"
         title={`Suspend ${bot.displayName}?`}
-        description="Its tokens stop working at once and its waiting requests are cancelled. Resume it to start it again."
+        description={
+          orphaned
+            ? 'It stays suspended when it gets a new owner, until someone resumes it.'
+            : 'Its tokens stop working at once and its waiting requests are cancelled. Resume it to start it again.'
+        }
         confirmLabel="Suspend"
       />
       <ConfirmDialog
         open={confirm === 'resume'}
         onClose={() => setConfirm(null)}
-        onConfirm={() => resume.mutate()}
+        onConfirm={() => run(resume)}
         loading={resume.isPending}
         variant="warning"
         title={`Resume ${bot.displayName}?`}
@@ -214,7 +254,7 @@ export default function ServiceAccountDetail() {
       <ConfirmDialog
         open={confirm === 'delete'}
         onClose={() => setConfirm(null)}
-        onConfirm={() => remove.mutate()}
+        onConfirm={() => run(remove)}
         loading={remove.isPending}
         title={`Delete ${bot.displayName}?`}
         description={
@@ -354,6 +394,7 @@ function OwnersCard({
   onDraftChange: (draft: string[] | null) => void;
   onChanged: (next: Detail) => void;
 }) {
+  const queryClient = useQueryClient();
   const save = useMutationWithToast(
     (ownerIds: string[]) => serviceAccountsApi.setOwners(bot.id, ownerIds),
     {
@@ -363,6 +404,9 @@ function OwnersCard({
         setDraft(null);
         onChanged(next);
       },
+      // Refused: read the owners again, so the list shows what the server holds; the editor
+      // keeps the draft to fix
+      onError: () => void queryClient.invalidateQueries({ queryKey: ['service-account', bot.id] }),
     },
   );
 
@@ -426,11 +470,38 @@ function OwnersCard({
   );
 }
 
-function MembershipsCard({ bot, orgSlug }: { bot: Detail; orgSlug: string }) {
+function MembershipsCard({
+  bot,
+  orgSlug,
+  onAdded,
+}: {
+  bot: Detail;
+  orgSlug: string;
+  onAdded: () => void;
+}) {
+  const [adding, setAdding] = useState<'team' | 'space' | null>(null);
+  const joinable = bot.joinable ?? { teams: [], spaces: [] };
   return (
-    <Section title="Where it is">
+    <Section
+      title="Where it is"
+      action={
+        <div className="flex gap-1">
+          {joinable.teams.length > 0 && (
+            <Button variant="ghost" size="xs" onClick={() => setAdding('team')}>
+              <UserPlus className="h-3.5 w-3.5" /> Add to team
+            </Button>
+          )}
+          {joinable.spaces.length > 0 && (
+            <Button variant="ghost" size="xs" onClick={() => setAdding('space')}>
+              <BookOpen className="h-3.5 w-3.5" /> Add to space
+            </Button>
+          )}
+        </div>
+      }
+    >
       <p className="mb-3 text-xs text-text-tertiary">
-        Change its teams on each team&apos;s members page.
+        It can join a team or space one of its owners is in. Change its teams on each team&apos;s
+        members page.
       </p>
       {bot.teams.length === 0 && bot.spaces.length === 0 ? (
         <p className="text-sm text-text-tertiary">In no team or space yet.</p>
@@ -456,7 +527,101 @@ function MembershipsCard({ bot, orgSlug }: { bot: Detail; orgSlug: string }) {
           ))}
         </ul>
       )}
+      {adding && (
+        <AddPlaceModal
+          kind={adding}
+          bot={bot}
+          places={adding === 'team' ? joinable.teams : joinable.spaces}
+          onClose={() => setAdding(null)}
+          onAdded={() => {
+            setAdding(null);
+            onAdded();
+          }}
+        />
+      )}
     </Section>
+  );
+}
+
+/** The roles a bot may have: at most member of a team, at most edit on a space */
+const PLACE_ROLES = {
+  team: [
+    { value: 'MEMBER', label: 'Member' },
+    { value: 'VIEWER', label: 'Viewer' },
+  ],
+  space: [
+    { value: 'EDIT', label: 'Edit' },
+    { value: 'VIEW', label: 'View' },
+  ],
+};
+
+/**
+ * Add a bot to a team or space, through the same member and permission actions as a person.
+ * @param props - What is added where
+ * @param props.kind - A team or a space
+ * @param props.bot - The bot
+ * @param props.places - The teams or spaces it may join
+ * @param props.onClose - Close without adding
+ * @param props.onAdded - Called once it is added
+ */
+function AddPlaceModal({
+  kind,
+  bot,
+  places,
+  onClose,
+  onAdded,
+}: {
+  kind: 'team' | 'space';
+  bot: Detail;
+  places: JoinablePlace[];
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [placeId, setPlaceId] = useState(places[0]?.id ?? '');
+  const [role, setRole] = useState(PLACE_ROLES[kind][0].value);
+  const add = useMutationWithToast(
+    () =>
+      kind === 'team'
+        ? teamsApi.addMember(placeId, bot.id, role)
+        : spacePermissionsApi.upsert(placeId, { userId: bot.id, level: role }),
+    {
+      successMessage: kind === 'team' ? 'Added to the team' : 'Added to the space',
+      errorMessage: null,
+      onSuccess: onAdded,
+    },
+  );
+  return (
+    <Modal open onClose={onClose} title={kind === 'team' ? 'Add to team' : 'Add to space'}>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (placeId) add.mutate();
+        }}
+      >
+        <Select
+          label={kind === 'team' ? 'Team' : 'Space'}
+          value={placeId}
+          onChange={(v) => setPlaceId(v as string)}
+          options={places.map((p) => ({ value: p.id, label: p.name }))}
+        />
+        <Select
+          label={kind === 'team' ? 'Role' : 'Access'}
+          value={role}
+          onChange={(v) => setRole(v as string)}
+          options={PLACE_ROLES[kind]}
+        />
+        {add.error && <ErrorAlert error={new Error(serviceAccountError(add.error))} fallback="" />}
+        <ModalFooter>
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+            <X className="h-3.5 w-3.5" /> Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={!placeId || add.isPending}>
+            <Plus className="h-3.5 w-3.5" /> Add
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }
 

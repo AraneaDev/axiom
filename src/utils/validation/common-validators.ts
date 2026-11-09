@@ -132,9 +132,23 @@ export const createOrgSchema = z.object({
 
 // ─── Teams ──────────────────────────────────────────────────
 
+/**
+ * What a new team may not be called: an org-level route such as /:org/settings is tried before
+ * /:org/:team, so a team with that name would never reach its overview. team-slugs.test.ts ties
+ * this to the router. Teams that already have such a slug keep it; a team's slug never changes.
+ */
+export const RESERVED_TEAM_SLUGS: ReadonlySet<string> = new Set([
+  'analytics',
+  'approvals',
+  'settings',
+  'teams',
+]);
+
 export const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: slugValidator,
+  slug: slugValidator.refine((slug) => !RESERVED_TEAM_SLUGS.has(slug), {
+    message: 'This slug is reserved by the app, choose another',
+  }),
   description: z.string().max(500).optional(),
 });
 

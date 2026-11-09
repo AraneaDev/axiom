@@ -550,6 +550,7 @@ export async function getTeamMemberProfile(teamId: string, username: string, vie
         email: true,
         username: true,
         displayName: true,
+        kind: true,
         avatarUrl: true,
         createdAt: true,
       },

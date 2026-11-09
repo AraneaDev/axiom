@@ -23,6 +23,8 @@ const api = vi.hoisted(() => ({
   resume: vi.fn(),
   delete: vi.fn(),
   approvals: vi.fn(),
+  addTeamMember: vi.fn(),
+  setSpacePermission: vi.fn(),
 }));
 const authUser = vi.hoisted(() => ({ current: { id: 'u-admin', isAdmin: false } }));
 
@@ -30,6 +32,10 @@ vi.mock('@/api/orgs.api', () => ({
   orgsApi: { list: api.orgs, listMembers: api.members },
 }));
 vi.mock('@/api/agent-approvals.api', () => ({ agentApprovalsApi: { list: api.approvals } }));
+vi.mock('@/api/teams.api', () => ({ teamsApi: { addMember: api.addTeamMember } }));
+vi.mock('@/api/space-permissions.api', () => ({
+  spacePermissionsApi: { upsert: api.setSpacePermission },
+}));
 vi.mock('@/api/service-accounts.api', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/api/service-accounts.api')>();
   return {
@@ -89,12 +95,13 @@ function detail(over: Record<string, unknown> = {}) {
         createdAt: '2026-11-01T00:00:00Z',
       },
     ],
+    joinable: { teams: [], spaces: [] },
     ...over,
   };
 }
 
-function show(role = 'ADMIN') {
-  api.orgs.mockResolvedValue([{ ...ORG, role }]);
+function show(role = 'ADMIN', orgs?: Array<typeof ORG & { role: string }>) {
+  api.orgs.mockResolvedValue(orgs ?? [{ ...ORG, role }]);
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -282,5 +289,147 @@ describe('ServiceAccountDetail', () => {
     expect(
       await screen.findByText('This service account does not exist, or you cannot see it.'),
     ).toBeInTheDocument();
+  });
+
+  it('I1: a refused resume closes its dialog and says why on the page', async () => {
+    api.get.mockResolvedValue(detail({ status: 'SUSPENDED', suspendedReason: 'MANUAL' }));
+    api.resume.mockRejectedValue(new ApiError(400, 'server text', 'SERVICE_ACCOUNT_OWNER_NEEDED'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /^Resume$/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Resume/ }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(/needs an owner who can open it/);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('I1: a refused delete closes its dialog and says why on the page', async () => {
+    api.get.mockResolvedValue(detail());
+    api.delete.mockRejectedValue(new ApiError(404, 'gone', 'SERVICE_ACCOUNT_NOT_FOUND'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /^Delete$/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Delete/ }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(/does not exist/);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('M4: an old error goes once a later attempt succeeds', async () => {
+    api.get.mockResolvedValue(detail({ status: 'SUSPENDED', suspendedReason: 'MANUAL' }));
+    api.resume
+      .mockRejectedValueOnce(new ApiError(400, 'x', 'SERVICE_ACCOUNT_OWNER_NEEDED'))
+      .mockResolvedValueOnce(detail({ status: 'SUSPENDED', suspendedReason: 'MANUAL' }));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /^Resume$/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Resume/ }),
+    );
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Resume$/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Resume/ }),
+    );
+    await waitFor(() => expect(api.resume).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('M7: after a refused setOwners the bot is read again, and the editor keeps the draft', async () => {
+    api.get.mockResolvedValue(detail());
+    api.setOwners.mockRejectedValue(new ApiError(400, 'x', 'SERVICE_ACCOUNT_OWNER_NEEDED'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /Edit owners/ }));
+    fireEvent.click(await screen.findByLabelText(/Pim Voorbeeld/));
+    fireEvent.click(screen.getByRole('button', { name: /Save owners/ }));
+    await screen.findByRole('alert');
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText(/Pim Voorbeeld/)).not.toBeChecked();
+    expect(screen.getByLabelText(/Jan Voorbeeld/)).toBeChecked();
+    const owners = screen.getByTestId('owners');
+    expect(within(owners).getByText('Pim Voorbeeld')).toBeInTheDocument();
+  });
+
+  it("M1: rights and links follow the bot's org, not the org in the address", async () => {
+    // An admin of acme-labs who only owns this bot of another org
+    api.get.mockResolvedValue(detail({ orgId: 'org-2' }));
+    show('ADMIN', [
+      { ...ORG, role: 'ADMIN' },
+      { id: 'org-2', slug: 'voorbeeld', name: 'Voorbeeld', role: 'MEMBER' },
+    ]);
+    expect(await screen.findByRole('link', { name: /Core/ })).toHaveAttribute(
+      'href',
+      '/voorbeeld/core/members',
+    );
+    expect(screen.queryByRole('button', { name: /^Delete$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Edit owners/ })).toBeNull();
+  });
+
+  it('M8: the subtitle has no unicode separator', async () => {
+    api.get.mockResolvedValue(detail());
+    show();
+    expect(await screen.findByText(/@nightly-triage/)).not.toHaveTextContent('\u00b7');
+  });
+
+  it('an orphaned bot can still be suspended by hand', async () => {
+    api.get.mockResolvedValue(
+      detail({ status: 'SUSPENDED', suspendedReason: 'ORPHANED', owners: [] }),
+    );
+    api.suspend.mockResolvedValue(detail({ status: 'SUSPENDED', suspendedReason: 'MANUAL' }));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /^Suspend$/ }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /Suspend/ }),
+    );
+    await waitFor(() => expect(api.suspend).toHaveBeenCalledWith('bot-1'));
+  });
+
+  it('adds the bot to a team its owners are in, as a member by default', async () => {
+    api.get.mockResolvedValue(
+      detail({ joinable: { teams: [{ id: 't2', name: 'Ops', slug: 'ops' }], spaces: [] } }),
+    );
+    api.addTeamMember.mockResolvedValue({});
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /Add to team/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByLabelText('Role'));
+    expect(within(dialog).queryByText('Admin')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Add$/ }));
+    await waitFor(() => expect(api.addTeamMember).toHaveBeenCalledWith('t2', 'bot-1', 'MEMBER'));
+  });
+
+  it('a refused add to team says why in the dialog', async () => {
+    api.get.mockResolvedValue(
+      detail({ joinable: { teams: [{ id: 't2', name: 'Ops', slug: 'ops' }], spaces: [] } }),
+    );
+    api.addTeamMember.mockRejectedValue(new ApiError(400, 'x', 'SERVICE_ACCOUNT_OWNER_NOT_MEMBER'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /Add to team/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Add$/ }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /one of its owners can open/,
+    );
+  });
+
+  it('adds the bot to a space, with edit by default', async () => {
+    api.get.mockResolvedValue(
+      detail({ joinable: { teams: [], spaces: [{ id: 's2', name: 'Runbooks', slug: 'rb' }] } }),
+    );
+    api.setSpacePermission.mockResolvedValue({});
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /Add to space/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Add$/ }));
+    await waitFor(() =>
+      expect(api.setSpacePermission).toHaveBeenCalledWith('s2', { userId: 'bot-1', level: 'EDIT' }),
+    );
+  });
+
+  it('offers no add when no team or space of its owners is left', async () => {
+    api.get.mockResolvedValue(detail());
+    show();
+    await screen.findByText('Triages the backlog every night');
+    expect(screen.queryByRole('button', { name: /Add to team/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Add to space/ })).toBeNull();
   });
 });

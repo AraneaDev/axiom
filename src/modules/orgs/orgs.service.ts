@@ -184,7 +184,8 @@ export async function listOrgMembers(orgId: string, opts: { includeBots?: boolea
       orgId,
       user: { kind: opts.includeBots ? { in: ['PERSON', 'SERVICE'] } : 'PERSON' },
     },
-    include: { user: { select: USER_BASIC_SELECT } },
+    // deactivatedAt so the owner picker leaves out who can't own a bot
+    include: { user: { select: { ...USER_BASIC_SELECT, deactivatedAt: true } } },
     orderBy: { createdAt: 'asc' },
   });
 }

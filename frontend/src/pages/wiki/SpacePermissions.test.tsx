@@ -94,4 +94,24 @@ describe('SpacePermissions', () => {
       expect(api.upsert).toHaveBeenCalledWith('s1', { userId: 'u2', level: 'VIEW' }),
     );
   });
+
+  it('marks a bot that holds a permission', async () => {
+    api.list.mockResolvedValue([
+      {
+        ...holder,
+        id: 'perm-bot',
+        userId: 'b1',
+        user: {
+          id: 'b1',
+          username: 'nightly',
+          displayName: 'Nightly Triage',
+          avatarUrl: null,
+          kind: 'SERVICE',
+        },
+      },
+    ]);
+    renderPanel();
+    expect(await screen.findByText('Nightly Triage')).toBeInTheDocument();
+    expect(screen.getByText('bot')).toBeInTheDocument();
+  });
 });

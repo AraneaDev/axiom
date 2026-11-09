@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Spinner } from '@/components/ui/Spinner';
+import { UserName } from '@/components/ui/UserName';
 import { ViaLabel } from '@/components/ui/ViaLabel';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -205,7 +206,9 @@ export function RecentActivityWidget({ activities }: { activities: DashboardActi
                 />
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <p className="text-sm leading-snug line-clamp-2">
-                    <span className="font-medium">{a.user.displayName}</span>{' '}
+                    <span className="font-medium">
+                      <UserName user={a.user} />
+                    </span>{' '}
                     <ViaLabel via={a.via} />{' '}
                     <span className="text-text-secondary">{actionLabel}</span>{' '}
                     {a.resourceLink ? (

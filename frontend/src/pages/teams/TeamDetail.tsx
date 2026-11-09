@@ -22,6 +22,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { UserName } from '@/components/ui/UserName';
 import { useTeamContext } from '@/hooks/useTeamContext';
 
 import { TeamActivityCard } from './TeamActivityCard';
@@ -49,9 +50,10 @@ export default function TeamDetail() {
     enabled: !!currentTeam?.id,
   });
 
-  const { data: teamDetail } = useQuery({
-    queryKey: ['team', currentTeam?.id],
-    queryFn: () => teamsApi.get(currentTeam!.id),
+  // The member list, bots included and marked; pickers read the people-only team.get
+  const { data: members } = useQuery({
+    queryKey: ['team-members', currentTeam?.id],
+    queryFn: () => teamsApi.listMembers(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
 
@@ -181,11 +183,11 @@ export default function TeamDetail() {
           </div>
 
           {/* Team Members */}
-          {teamDetail?.members && (
+          {members && (
             <Card className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-                  Members ({teamDetail.members.length})
+                  Members ({members.length})
                 </h3>
                 <Tooltip content="View all members">
                   <ButtonLink
@@ -199,42 +201,32 @@ export default function TeamDetail() {
                 </Tooltip>
               </div>
               <div className="space-y-1">
-                {teamDetail.members.slice(0, 10).map(
-                  (m: {
-                    id: string;
-                    role: string;
-                    user: {
-                      displayName: string;
-                      username: string;
-                      avatarUrl?: string | null;
-                    };
-                  }) => (
-                    <Link
-                      key={m.id}
-                      to={`/${org}/${teamSlug}/members/${m.user.username}`}
-                      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-surface-secondary transition-colors"
-                    >
-                      <Avatar
-                        name={m.user.displayName}
-                        src={m.user.avatarUrl ?? undefined}
-                        size="sm"
-                      />
-                      <span className="text-sm font-medium text-text flex-1 truncate">
-                        {m.user.displayName}
-                      </span>
-                      <Badge variant="outline" size="sm">
-                        <Shield className="h-3 w-3" />
-                        {m.role.toLowerCase()}
-                      </Badge>
-                    </Link>
-                  ),
-                )}
-                {teamDetail.members.length > 10 && (
+                {members.slice(0, 10).map((m) => (
+                  <Link
+                    key={m.id}
+                    to={`/${org}/${teamSlug}/members/${m.user.username}`}
+                    className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-surface-secondary transition-colors"
+                  >
+                    <Avatar
+                      name={m.user.displayName}
+                      src={m.user.avatarUrl ?? undefined}
+                      size="sm"
+                    />
+                    <span className="text-sm font-medium text-text flex-1 truncate">
+                      <UserName user={m.user} />
+                    </span>
+                    <Badge variant="outline" size="sm">
+                      <Shield className="h-3 w-3" />
+                      {m.role.toLowerCase()}
+                    </Badge>
+                  </Link>
+                ))}
+                {members.length > 10 && (
                   <Link
                     to={`/${org}/${teamSlug}/members`}
                     className="block text-xs text-primary hover:underline text-center pt-2"
                   >
-                    View all {teamDetail.members.length} members
+                    View all {members.length} members
                   </Link>
                 )}
               </div>

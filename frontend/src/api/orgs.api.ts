@@ -78,7 +78,14 @@ export const orgsApi = {
 export interface OrgMember {
   userId: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST';
-  user: { id: string; username: string; displayName: string; kind?: UserKind };
+  user: {
+    id: string;
+    username: string;
+    displayName: string;
+    kind?: UserKind;
+    /** Set for someone deactivated: they can't own a bot */
+    deactivatedAt?: string | null;
+  };
 }
 
 export interface Invitation {

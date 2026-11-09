@@ -1,4 +1,4 @@
-import type { Team, TeamMember } from '@/lib/types';
+import type { Team, TeamMember, UserKind } from '@/lib/types';
 
 import { get, post, patch, del } from './client';
 
@@ -99,6 +99,7 @@ export const teamsApi = {
       email?: string;
       username: string;
       displayName: string;
+      kind?: UserKind;
       avatarUrl: string | null;
       createdAt: string;
       role: string;
@@ -112,7 +113,13 @@ export const teamsApi = {
         details: Record<string, unknown> | null;
         createdAt: string;
         via: string | null;
-        user: { id: string; displayName: string; username: string; avatarUrl: string | null };
+        user: {
+          id: string;
+          displayName: string;
+          username: string;
+          avatarUrl: string | null;
+          kind?: UserKind;
+        };
       }[];
     }>(`/teams/${teamId}/members/profile/${username}`),
 };
