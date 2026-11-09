@@ -1,18 +1,25 @@
-import { useQuery } from '@tanstack/react-query';
-import { Bot, CheckCircle, History, Hourglass, XCircle } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bot, Check, CheckCircle, History, Hourglass, Lock, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
 import { agentApprovalsApi, type AgentApprovalSummary } from '@/api/agent-approvals.api';
+import { serviceAccountError } from '@/api/service-accounts.api';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { Tabs } from '@/components/ui/Tabs';
+import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { effectiveStatus, REFETCH_MS, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/agent-approvals';
 import { formatRelative } from '@/lib/utils';
+
+import { BotLine } from './BotLine';
 
 type Tab = 'pending' | 'history';
 
@@ -50,6 +57,25 @@ export default function AgentApprovals() {
     refetchOnWindowFocus: true,
   });
 
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  // A decision from the list: the row leaves the pending tab once the list is read again
+  const decide = useMutationWithToast(
+    ({ id, approve }: { id: string; approve: boolean }) =>
+      approve ? agentApprovalsApi.approve(id) : agentApprovalsApi.reject(id),
+    {
+      successMessage: null,
+      errorMessage: null,
+      onSuccess: (row) => {
+        if (row.status === 'FAILED') toast.error('Approved, but the action failed');
+        else toast.success(row.status === 'REJECTED' ? 'Request rejected' : 'Approved');
+        void queryClient.invalidateQueries({ queryKey: ['agent-approvals'] });
+      },
+      // Decided elsewhere or gone meanwhile: the list read again shows what holds now
+      onError: () => void queryClient.invalidateQueries({ queryKey: ['agent-approvals'] }),
+    },
+  );
+
   const rows = (data?.data ?? []).filter((row) =>
     tab === 'pending'
       ? effectiveStatus(row, now) === 'PENDING'
@@ -73,6 +99,12 @@ export default function AgentApprovals() {
         }}
         className="mb-4"
       />
+
+      {decide.error && (
+        <div className="mb-4">
+          <ErrorAlert error={new Error(serviceAccountError(decide.error))} fallback="" />
+        </div>
+      )}
 
       {isLoading ? (
         <ListSkeleton rows={4} />
@@ -102,6 +134,7 @@ export default function AgentApprovals() {
                 <Th>Token</Th>
                 <Th>Status</Th>
                 <Th>Asked</Th>
+                {tab === 'pending' && <Th>Decide</Th>}
               </TrHead>
             </Thead>
             <Tbody>
@@ -110,21 +143,53 @@ export default function AgentApprovals() {
                 return (
                   <tr key={row.id} className="hover:bg-surface-secondary transition-colors">
                     <Td className="max-w-lg">
-                      <Link
-                        to={`/approvals/agent/${row.id}`}
-                        className="text-primary hover:underline font-medium line-clamp-2 break-words"
-                      >
-                        {row.preview}
-                      </Link>
+                      {row.restricted ? (
+                        <span className="inline-flex items-center gap-1.5 font-medium text-text-secondary">
+                          <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />A request in a
+                          place you can&apos;t open
+                        </span>
+                      ) : (
+                        <Link
+                          to={`/approvals/agent/${row.id}`}
+                          className="text-primary hover:underline font-medium line-clamp-2 break-words"
+                        >
+                          {row.preview}
+                        </Link>
+                      )}
                       <span className="block text-xs font-mono text-text-tertiary">
                         {row.action}
                       </span>
+                      {row.serviceAccount && <BotLine bot={row.serviceAccount} />}
                     </Td>
                     <Td className="text-sm text-text-secondary">{row.apiTokenName ?? 'Unknown'}</Td>
                     <Td>
                       <Badge variant={STATUS_VARIANTS[status]}>{STATUS_LABELS[status]}</Badge>
                     </Td>
                     <Td className="text-sm text-text-tertiary">{formatRelative(row.createdAt)}</Td>
+                    {tab === 'pending' && (
+                      <Td>
+                        {/* A stub is decided by an owner who can open its place, never here */}
+                        {!row.restricted && status === 'PENDING' && (
+                          <div className="flex gap-1">
+                            <Button
+                              size="xs"
+                              disabled={decide.isPending}
+                              onClick={() => decide.mutate({ id: row.id, approve: true })}
+                            >
+                              <Check className="h-3.5 w-3.5" /> Approve
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              disabled={decide.isPending}
+                              onClick={() => decide.mutate({ id: row.id, approve: false })}
+                            >
+                              <X className="h-3.5 w-3.5" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                      </Td>
+                    )}
                   </tr>
                 );
               })}

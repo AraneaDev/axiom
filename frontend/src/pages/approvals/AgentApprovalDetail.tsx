@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { agentApprovalsApi, type AgentApproval } from '@/api/agent-approvals.api';
+import { serviceAccountError } from '@/api/service-accounts.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -23,6 +24,8 @@ import {
   timeLeft,
 } from '@/lib/agent-approvals';
 import { formatTimestamp } from '@/lib/format';
+
+import { BotLine } from './BotLine';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -139,10 +142,19 @@ function AgentApprovalDetailFor({ id }: { id: string }) {
           <Card className="p-5">
             <dl className="divide-y divide-border-light">
               <Field label="Who">
-                <span className="inline-flex items-center gap-1.5">
-                  <Bot className="h-3.5 w-3.5 text-text-secondary" />
-                  You, through the token {row.apiTokenName ?? 'unknown'}
-                </span>
+                {row.serviceAccount ? (
+                  <>
+                    <BotLine bot={row.serviceAccount} />
+                    <span className="block text-xs text-text-tertiary">
+                      Through its token {row.apiTokenName ?? 'unknown'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Bot className="h-3.5 w-3.5 text-text-secondary" />
+                    You, through the token {row.apiTokenName ?? 'unknown'}
+                  </span>
+                )}
               </Field>
               <Field label="Action">
                 <span className="font-mono text-xs">{row.action}</span>
@@ -202,7 +214,7 @@ function AgentApprovalDetailFor({ id }: { id: string }) {
               role="alert"
               className="mb-4 rounded-md border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger"
             >
-              {decisionError.message || 'Could not record your decision'}
+              {serviceAccountError(decisionError, 'Could not record your decision')}
             </div>
           )}
 

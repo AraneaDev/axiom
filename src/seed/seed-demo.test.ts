@@ -46,8 +46,13 @@ describe('seed-demo', () => {
 
   it('creates org memberships for all users', async () => {
     const org = await prisma.organization.findUnique({ where: { slug: 'aranea-dev' } });
-    const memberships = await prisma.orgMembership.findMany({ where: { orgId: org!.id } });
-    expect(memberships).toHaveLength(2);
+    const memberships = await prisma.orgMembership.findMany({
+      where: { orgId: org!.id },
+      include: { user: { select: { kind: true } } },
+    });
+    // The two people and the demo bot, which is always a member
+    expect(memberships.filter((m) => m.user.kind === 'PERSON')).toHaveLength(2);
+    expect(memberships).toHaveLength(3);
   });
 
   // ── Teams ──────────────────────────────────────────────────
@@ -182,6 +187,30 @@ describe('seed-demo', () => {
     expect(afterIssues).toBe(beforeIssues);
     expect(afterComments).toBe(beforeComments);
   }, 180_000);
+
+  // ── Service accounts ───────────────────────────────────────
+
+  it('has the demo bot once after two runs: owned by tim, a member of Axiom, without tokens', async () => {
+    const bots = await prisma.user.findMany({
+      where: { username: 'triage-bot' },
+      include: {
+        serviceAccount: { include: { owners: { include: { owner: true } }, org: true } },
+        orgMemberships: true,
+        teamMemberships: { include: { team: true } },
+        apiTokens: true,
+      },
+    });
+    expect(bots).toHaveLength(1);
+    const [bot] = bots;
+    expect(bot.kind).toBe('SERVICE');
+    expect(bot.displayName).toBe('Triage bot');
+    expect(bot.serviceAccount?.org.slug).toBe('aranea-dev');
+    expect(bot.serviceAccount?.status).toBe('ACTIVE');
+    expect(bot.serviceAccount?.owners.map((o) => o.owner.username)).toEqual(['tim']);
+    expect(bot.orgMemberships.map((m) => m.role)).toEqual(['MEMBER']);
+    expect(bot.teamMemberships.map((m) => [m.team.slug, m.role])).toEqual([['axiom', 'MEMBER']]);
+    expect(bot.apiTokens).toHaveLength(0);
+  });
 
   // ── Removed features ───────────────────────────────────────
 

@@ -3,6 +3,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The api client reads its tokens from localStorage when it loads
+vi.hoisted(() => {
+  const store = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+  });
+});
 const get = vi.hoisted(() => vi.fn());
 const approve = vi.hoisted(() => vi.fn());
 const reject = vi.hoisted(() => vi.fn());
@@ -67,6 +76,17 @@ describe('AgentApprovalDetail', () => {
     expect(screen.queryByText(/"key": "AXM-1"/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /show input/i }));
     expect(screen.getByText(/"key": "AXM-1"/)).toBeInTheDocument();
+  });
+
+  it("names a bot's request by the bot, with its marker, on behalf of nobody", async () => {
+    get.mockResolvedValue(
+      request({ userId: 'bot-1', serviceAccount: { id: 'bot-1', displayName: 'Triage bot' } }),
+    );
+    show();
+    expect(await screen.findByText('Triage bot')).toBeInTheDocument();
+    expect(screen.getByText('bot')).toBeInTheDocument();
+    expect(screen.getByText(/You own this bot/)).toBeInTheDocument();
+    expect(screen.queryByText(/^You, through/)).toBeNull();
   });
 
   it('approves, then shows the result', async () => {

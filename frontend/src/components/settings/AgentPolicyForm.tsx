@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Toggle } from '@/components/ui/Toggle';
 import {
+  BOT_EXPIRES_LIMITS,
+  formatMinutes,
   LIMITS,
   parseNames,
   problemWith,
@@ -59,6 +61,16 @@ function ActionNames({ names }: { names: string[] }) {
       </ul>
     </details>
   );
+}
+
+/**
+ * What a typed bot wait comes to, in days and hours, or nothing while it is no whole number.
+ * @param typed - The minutes as typed
+ */
+function botWait(typed: string): string {
+  const minutes = Number(typed);
+  if (typed.trim() === '' || !Number.isInteger(minutes) || minutes <= 0) return '';
+  return `That is ${formatMinutes(minutes)}.`;
 }
 
 /**
@@ -173,6 +185,22 @@ export function AgentPolicyForm({
           }`}
         />
       </div>
+
+      {scope === 'org' && (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Input
+            id="bot-expires-minutes"
+            label="How long a bot's requests wait (minutes)"
+            type="number"
+            min={BOT_EXPIRES_LIMITS[0]}
+            max={BOT_EXPIRES_LIMITS[1]}
+            value={values.botExpiresMinutes}
+            disabled={!canEdit}
+            onChange={(e) => set({ botExpiresMinutes: e.target.value })}
+            hint={`${botWait(values.botExpiresMinutes)} A bot's owners may be away longer than an hour. From 1 hour to 30 days.`}
+          />
+        </div>
+      )}
 
       <div className="mt-4">
         {scope === 'org' ? (

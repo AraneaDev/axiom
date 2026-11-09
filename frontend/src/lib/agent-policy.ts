@@ -8,6 +8,8 @@ export interface PolicyFormValues {
   crossContainerMove: boolean;
   bulkOver: string;
   expiresMinutes: string;
+  /** Org only: how long a bot's request waits for its owners */
+  botExpiresMinutes: string;
   alsoRequire: string[];
   neverRequire: string[];
 }
@@ -17,6 +19,24 @@ export const LIMITS = {
   org: { bulkOver: [0, 1000], expiresMinutes: [10, 1440] },
   user: { bulkOver: [0, 10], expiresMinutes: [10, 60] },
 } as const;
+
+/** How long a bot's request may wait, in minutes, and how long it waits unless an org says */
+export const BOT_EXPIRES_LIMITS = [60, 43200] as const;
+export const BOT_EXPIRES_DEFAULT = 10080;
+
+/**
+ * A number of minutes in days, hours and minutes, leaving out what is zero.
+ * @param minutes - The minutes
+ */
+export function formatMinutes(minutes: number): string {
+  const parts: [number, string][] = [
+    [Math.floor(minutes / 1440), 'day'],
+    [Math.floor((minutes % 1440) / 60), 'hour'],
+    [minutes % 60, 'minute'],
+  ];
+  const said = parts.filter(([n]) => n > 0).map(([n, word]) => `${n} ${word}${n === 1 ? '' : 's'}`);
+  return said.length > 0 ? said.join(' ') : '0 minutes';
+}
 
 /**
  * The form values for a policy.
@@ -29,6 +49,9 @@ export function valuesOf(policy: AgentPolicy): PolicyFormValues {
     crossContainerMove: effective.requireFor.crossContainerMove,
     bulkOver: String(effective.requireFor.bulkOver),
     expiresMinutes: String(effective.expiresMinutes),
+    botExpiresMinutes: String(
+      effective.botExpiresMinutes ?? policy.defaults.botExpiresMinutes ?? BOT_EXPIRES_DEFAULT,
+    ),
     alsoRequire: policy.rules.alsoRequire ?? [],
     neverRequire: policy.rules.neverRequire ?? [],
   };
@@ -59,6 +82,18 @@ export function problemWith(scope: PolicyScope, values: PolicyFormValues): strin
       return `${label} is a whole number from ${min} to ${max}`;
     }
   }
+  if (scope === 'org') {
+    const [min, max] = BOT_EXPIRES_LIMITS;
+    const value = Number(values.botExpiresMinutes);
+    if (
+      values.botExpiresMinutes.trim() === '' ||
+      !Number.isInteger(value) ||
+      value < min ||
+      value > max
+    ) {
+      return `A bot's request wait is a whole number of minutes from ${min} to ${max}`;
+    }
+  }
   return null;
 }
 
@@ -72,11 +107,14 @@ const FORM_RULES = [
   'neverRequire',
 ] as const;
 
+/** The rules only the org form edits: a user's save keeps them as stored */
+const ORG_FORM_RULES = ['botExpiresMinutes'] as const;
+
 /**
  * The rules to save: only what differs from the defaults, so a later change of a default still
  * reaches whoever never chose a value. A user keeps only stricter choices. A save replaces every
- * rule, so the stored rules the form does not show (botExpiresMinutes, or one added later) are
- * kept.
+ * rule, so the stored rules the form does not show (botExpiresMinutes on a user's form, or one
+ * added later) are kept.
  * @param scope - Whose rules
  * @param values - The form
  * @param policy - The policy the form started from
@@ -89,7 +127,9 @@ export function rulesFrom(
   const { defaults } = policy;
   const rules: AgentPolicyRules = Object.fromEntries(
     Object.entries(policy.rules).filter(
-      ([key]) => !(FORM_RULES as readonly string[]).includes(key),
+      ([key]) =>
+        !(FORM_RULES as readonly string[]).includes(key) &&
+        !(scope === 'org' && (ORG_FORM_RULES as readonly string[]).includes(key)),
     ),
   );
   if (scope === 'org') {
@@ -105,6 +145,12 @@ export function rulesFrom(
   }
   if (Number(values.expiresMinutes) !== defaults.expiresMinutes) {
     rules.expiresMinutes = Number(values.expiresMinutes);
+  }
+  if (scope === 'org') {
+    const botDefault = defaults.botExpiresMinutes ?? BOT_EXPIRES_DEFAULT;
+    if (Number(values.botExpiresMinutes) !== botDefault) {
+      rules.botExpiresMinutes = Number(values.botExpiresMinutes);
+    }
   }
   if (values.alsoRequire.length > 0) rules.alsoRequire = values.alsoRequire;
   if (scope === 'org' && values.neverRequire.length > 0) rules.neverRequire = values.neverRequire;

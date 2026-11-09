@@ -46,7 +46,8 @@ export default async function globalSetup() {
     await prisma.orgMembership.deleteMany();
     await prisma.organization.deleteMany();
     // The integration user comes from the migration and stays
-    await prisma.user.deleteMany({ where: { kind: 'PERSON' } });
+    // Bots too: their org rows went with the org, and the next run seeds the demo bot again
+    await prisma.user.deleteMany({ where: { kind: { in: ['PERSON', 'SERVICE'] } } });
 
     // Create users (all with password123 to match e2e/helpers.ts)
     const passwordHash = await bcrypt.hash('password123', 12);
@@ -110,6 +111,27 @@ export default async function globalSetup() {
               { userId: sarah.id, role: 'MEMBER' },
               { userId: marcus.id, role: 'MEMBER' },
             ],
+          },
+        },
+      },
+    });
+
+    // The demo bot, as the demo seed has it: owned by admin, a member of the team, no tokens
+    await prisma.user.create({
+      data: {
+        username: 'triage-bot',
+        displayName: 'Triage bot',
+        email: 'triage-bot@service-accounts.invalid',
+        passwordHash: '!',
+        kind: 'SERVICE',
+        orgMemberships: { create: { orgId: org.id, role: 'MEMBER' } },
+        teamMemberships: { create: { teamId: team.id, role: 'MEMBER' } },
+        serviceAccount: {
+          create: {
+            orgId: org.id,
+            createdById: admin.id,
+            description: 'Sorts new issues by type and priority every night.',
+            owners: { create: { ownerId: admin.id } },
           },
         },
       },

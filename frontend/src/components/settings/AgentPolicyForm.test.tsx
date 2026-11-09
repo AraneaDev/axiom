@@ -36,6 +36,32 @@ describe('AgentPolicyForm', () => {
     });
   });
 
+  it("sets how long a bot's requests wait, shown in days and hours, for an org only", () => {
+    const onSave = vi.fn();
+    const { unmount } = render(
+      <AgentPolicyForm scope="org" policy={policy} canEdit saving={false} onSave={onSave} />,
+    );
+    const field = screen.getByLabelText(/How long a bot's requests wait/);
+    expect(field).toHaveValue(10080);
+    expect(screen.getByText(/7 days/)).toBeInTheDocument();
+    fireEvent.change(field, { target: { value: '1500' } });
+    expect(screen.getByText(/1 day 1 hour/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /save rules/i }));
+    expect(onSave).toHaveBeenCalledWith({ botExpiresMinutes: 1500 });
+    unmount();
+
+    render(
+      <AgentPolicyForm
+        scope="user"
+        policy={{ ...policy, scope: 'user' }}
+        canEdit
+        saving={false}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.queryByLabelText(/How long a bot's requests wait/)).toBeNull();
+  });
+
   it('lets a user pick write actions and offers nothing that would loosen', () => {
     const onSave = vi.fn();
     render(

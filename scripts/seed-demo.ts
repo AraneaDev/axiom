@@ -729,6 +729,50 @@ async function main() {
     console.warn('        Permissions already exist');
   }
 
+  // ────────────────────────────────────────────────────────────
+  // Service account: one demo bot, owned by tim, a member of the Axiom team, without tokens
+  // ────────────────────────────────────────────────────────────
+  console.warn('  Service account');
+  const bot = await prisma.user.upsert({
+    where: { username: 'triage-bot' },
+    update: {},
+    create: {
+      username: 'triage-bot',
+      displayName: 'Triage bot',
+      // An address no mail reaches, and a hash no password matches: a bot never signs in
+      email: 'triage-bot@service-accounts.invalid',
+      passwordHash: '!',
+      kind: 'SERVICE',
+    },
+  });
+  await prisma.serviceAccount.upsert({
+    where: { userId: bot.id },
+    update: {},
+    create: {
+      userId: bot.id,
+      orgId: org.id,
+      createdById: users.tim.id,
+      description: 'Sorts new issues by type and priority every night.',
+    },
+  });
+  await prisma.serviceAccountOwner.upsert({
+    where: { serviceAccountId_ownerId: { serviceAccountId: bot.id, ownerId: users.tim.id } },
+    update: {},
+    create: { serviceAccountId: bot.id, ownerId: users.tim.id },
+  });
+  // A bot's org role is always member, and it is at most a member of a team
+  await prisma.orgMembership.upsert({
+    where: { userId_orgId: { userId: bot.id, orgId: org.id } },
+    update: { role: 'MEMBER' },
+    create: { userId: bot.id, orgId: org.id, role: 'MEMBER' },
+  });
+  await prisma.teamMembership.upsert({
+    where: { userId_teamId: { userId: bot.id, teamId: team.id } },
+    update: { role: 'MEMBER' },
+    create: { userId: bot.id, teamId: team.id, role: 'MEMBER' },
+  });
+  console.warn('        Triage bot (@triage-bot), owned by tim, member of Axiom');
+
   await seedPageMentions(prisma);
 
   console.warn('\nDemo seed complete!');

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AgentPolicy, EffectiveAgentPolicy } from '@/api/agent-policy.api';
 
-import { parseNames, problemWith, rulesFrom, valuesOf } from './agent-policy';
+import { formatMinutes, parseNames, problemWith, rulesFrom, valuesOf } from './agent-policy';
 
 const defaults: EffectiveAgentPolicy = {
   requireFor: { destructive: true, admin: true, bulkOver: 10, crossContainerMove: true },
@@ -41,13 +41,50 @@ describe('agent policy form values', () => {
     expect(rulesFrom('user', values, policy)).toEqual({ alsoRequire: ['issue.update'] });
   });
 
-  it('keeps stored rules the form does not show, such as botExpiresMinutes', () => {
+  it('keeps stored rules the form does not show', () => {
     const stored: AgentPolicy = {
       ...policy,
-      rules: { botExpiresMinutes: 120, destructive: false, laterRule: 'kept' },
+      rules: { destructive: false, laterRule: 'kept' },
     };
     const values = { ...valuesOf(stored), destructive: true };
-    expect(rulesFrom('org', values, stored)).toEqual({ botExpiresMinutes: 120, laterRule: 'kept' });
+    expect(rulesFrom('org', values, stored)).toEqual({ laterRule: 'kept' });
+  });
+
+  it("edits how long a bot's requests wait for an org, 10080 minutes unless set", () => {
+    expect(valuesOf(policy).botExpiresMinutes).toBe('10080');
+    const stored: AgentPolicy = {
+      ...policy,
+      rules: { botExpiresMinutes: 120 },
+      effective: { ...defaults, botExpiresMinutes: 120 },
+      defaults: { ...defaults, botExpiresMinutes: 10080 },
+    };
+    expect(valuesOf(stored).botExpiresMinutes).toBe('120');
+    expect(rulesFrom('org', valuesOf(stored), stored)).toEqual({ botExpiresMinutes: 120 });
+    // Back at the default, the rule is dropped
+    expect(rulesFrom('org', { ...valuesOf(stored), botExpiresMinutes: '10080' }, stored)).toEqual(
+      {},
+    );
+  });
+
+  it("keeps a stored bot expiry on a user's save: the user form has no such field", () => {
+    const stored: AgentPolicy = { ...policy, scope: 'user', rules: { botExpiresMinutes: 120 } };
+    expect(rulesFrom('user', valuesOf(stored), stored)).toEqual({ botExpiresMinutes: 120 });
+  });
+
+  it('refuses a bot expiry outside 60 to 43200 minutes, for an org only', () => {
+    const values = valuesOf(policy);
+    expect(problemWith('org', { ...values, botExpiresMinutes: '59' })).toMatch(/60 to 43200/);
+    expect(problemWith('org', { ...values, botExpiresMinutes: '43201' })).toMatch(/60 to 43200/);
+    expect(problemWith('org', { ...values, botExpiresMinutes: '43200' })).toBeNull();
+    expect(problemWith('user', { ...values, botExpiresMinutes: '1' })).toBeNull();
+  });
+
+  it('says a number of minutes in days and hours', () => {
+    expect(formatMinutes(10080)).toBe('7 days');
+    expect(formatMinutes(60)).toBe('1 hour');
+    expect(formatMinutes(1500)).toBe('1 day 1 hour');
+    expect(formatMinutes(90)).toBe('1 hour 30 minutes');
+    expect(formatMinutes(43200)).toBe('30 days');
   });
 
   it('reads action names one per line, once each', () => {
