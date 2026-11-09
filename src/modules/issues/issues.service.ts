@@ -185,6 +185,15 @@ export async function createIssue(
     });
   }
 
+  // Queued before automation starts, so a rule's own change reaches the bot after this one
+  if (data.assigneeId) {
+    await emitIssueEvents({
+      issueId: issue.id,
+      actorId: creatorId,
+      assignee: { from: null, to: data.assigneeId },
+    });
+  }
+
   // Fire automation rules (non-blocking)
   if (!options?.skipAutomation) {
     prisma.issue
@@ -204,14 +213,6 @@ export async function createIssue(
           err as Error,
         );
       });
-  }
-
-  if (data.assigneeId) {
-    await emitIssueEvents({
-      issueId: issue.id,
-      actorId: creatorId,
-      assignee: { from: null, to: data.assigneeId },
-    });
   }
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:created', projectId, issueId: issue.id });
@@ -653,6 +654,21 @@ export async function updateIssue(
     await bindStagedAttachments(data.body, { issueId: issue.id }, actorId);
   }
 
+  // Queued before automation starts, so a rule's own change reaches the bot after this one
+  await emitIssueEvents({
+    issueId: issue.id,
+    actorId: userId,
+    assignee:
+      data.assigneeId !== undefined && (data.assigneeId || null) !== issue.assigneeId
+        ? { from: issue.assigneeId, to: data.assigneeId || null }
+        : undefined,
+    status:
+      data.columnId !== undefined && data.columnId !== issue.columnId
+        ? { fromColumnId: issue.columnId, toColumnId: data.columnId }
+        : undefined,
+    changedFields: changedIssueFields(issue, previousLabels, data),
+  });
+
   // Fire automation rules (non-blocking)
   if (!options?.skipAutomation) {
     prisma.issue
@@ -702,20 +718,6 @@ export async function updateIssue(
         logger.error('Failed to hydrate issue for automation rules', { projectId }, err as Error);
       });
   }
-
-  await emitIssueEvents({
-    issueId: issue.id,
-    actorId: userId,
-    assignee:
-      data.assigneeId !== undefined && (data.assigneeId || null) !== issue.assigneeId
-        ? { from: issue.assigneeId, to: data.assigneeId || null }
-        : undefined,
-    status:
-      data.columnId !== undefined && data.columnId !== issue.columnId
-        ? { fromColumnId: issue.columnId, toColumnId: data.columnId }
-        : undefined,
-    changedFields: changedIssueFields(issue, previousLabels, data),
-  });
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId: issue.id });
 

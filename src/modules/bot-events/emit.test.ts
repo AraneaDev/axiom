@@ -376,6 +376,58 @@ describe('bot events for an assigned issue', () => {
     expect((await allEvents()).map((e) => [e.botId, e.type])).toEqual([[botA, 'issue.assigned']]);
   });
 
+  describe('an automation rule fired by the write', () => {
+    /**
+     * Hold the first webhook lookup back, so the write's own emit is slow; the rule's emit must
+     * still come after it.
+     */
+    function slowFirstEmit() {
+      const original = prisma.botWebhook.findUnique.bind(prisma.botWebhook);
+      return vi
+        .spyOn(prisma.botWebhook, 'findUnique')
+        .mockImplementationOnce(((args: Parameters<typeof original>[0]) =>
+          new Promise((resolve) => setTimeout(resolve, 300)).then(() =>
+            original(args),
+          )) as unknown as typeof original);
+    }
+
+    async function withRule(trigger: string, run: () => Promise<unknown>) {
+      const rule = await createRule(ctx.projectId, {
+        name: 'Start work',
+        trigger,
+        actions: [{ type: 'set_status', columnId: columns[1].id }],
+      } as Parameters<typeof createRule>[1]);
+      const spy = slowFirstEmit();
+      try {
+        await run();
+        await vi.waitFor(async () => expect(await eventsOf(botA)).toHaveLength(2), {
+          timeout: 5_000,
+        });
+      } finally {
+        spy.mockRestore();
+        await deleteRule(rule.id);
+      }
+      const events = await eventsOf(botA);
+      expect(events.map((e) => e.type)).toEqual(['issue.assigned', 'issue.status_changed']);
+      // The rule moved the issue as the person who assigned it, so the bot hears of it
+      expect((events[1].payload as { actor: unknown }).actor).toEqual({
+        id: ctx.owner.id,
+        kind: 'PERSON',
+      });
+    }
+
+    it('updateIssue queues issue.assigned before the status change its rule makes', async () => {
+      const issue = await newIssue('Rule after assign');
+      await withRule('issue:assigned', () =>
+        updateIssue(ctx.projectId, issue.number, { assigneeId: botA }, ctx.owner.id),
+      );
+    });
+
+    it('createIssue queues issue.assigned before the status change its rule makes', async () => {
+      await withRule('issue:created', () => newIssue('Rule after create', botA));
+    });
+  });
+
   it("the bot's own comment or edit queues nothing", async () => {
     const issue = await botIssue('Mine');
     await asBot(botA, () => addComment(issue.id, botA, 'Working on it'));
