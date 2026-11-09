@@ -16,7 +16,12 @@ import { logAudit } from '../audit/audit.service';
 import { disconnect as disconnectGithub } from '../github/github-account.service';
 import { isIntegrationUser } from '../github/integration-user';
 import { assertNotLastOwnerTx } from '../orgs/org-roles';
-import { onOrgRoleChanged, onOwnershipLapseEverywhere } from '../service-accounts/bot-guards';
+import {
+  botIdsOwnedBy,
+  onOrgRoleChanged,
+  onOwnershipLapseEverywhere,
+  recheckBots,
+} from '../service-accounts/bot-guards';
 
 // ─── Admin Check ────────────────────────────────────────────
 
@@ -265,9 +270,6 @@ export async function deleteUser(userId: string) {
     }
   };
   await prisma.$transaction(guardLastOwner);
-  // Their bots lose them as an owner before the cascade drops the owner rows unseen: orphans are
-  // suspended, the other bots leave the places only this user was in
-  await onOwnershipLapseEverywhere(userId);
   // The row cascades with the user, and the grant at GitHub would outlive it: revoked first, on
   // a best-effort basis, and only for a delete that is going to happen
   try {
@@ -277,12 +279,18 @@ export async function deleteUser(userId: string) {
       code: err instanceof AppError ? err.code : undefined,
     });
   }
+  // Their bots, read before the cascade drops the owner rows unseen, and checked only once the
+  // delete has happened: orphans are suspended, the others leave the places only this user was in
+  const ownedBots = await botIdsOwnedBy(userId);
   await prisma.$transaction(async (tx) => {
     await guardLastOwner(tx);
+    // Their org rows before the cascade takes their team rows: the order every bot check uses
+    await tx.$queryRaw`SELECT id FROM org_memberships WHERE "userId" = ${userId} ORDER BY id FOR UPDATE`;
     await tx.user.delete({ where: { id: userId } });
   });
   // Live sockets authenticated before the delete: close them
   disconnectUser(userId);
+  await recheckBots(ownedBots);
   return { deleted: true };
 }
 

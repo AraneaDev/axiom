@@ -25,6 +25,10 @@ const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> 
     label: 'Agent approval requests',
     description: 'When an agent asks for your approval. It always shows in the app',
   },
+  service_account: {
+    label: 'Service accounts',
+    description: 'When a service account you own or manage leaves a place or loses its owners',
+  },
 };
 
 /** Types that always show in the app, so only their email is a choice */

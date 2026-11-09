@@ -161,13 +161,13 @@ describe('Notifications API', () => {
   // ── Notification Preferences ──────────────────────────────
 
   describe('GET /api/notifications/preferences', () => {
-    it('should return default preferences for all 4 event types', async () => {
+    it('should return default preferences for all 5 event types', async () => {
       const res = await request(app)
         .get('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('preferences');
-      expect(res.body.preferences).toHaveLength(4);
+      expect(res.body.preferences).toHaveLength(5);
 
       const eventTypes = res.body.preferences.map((p: { eventType: string }) => p.eventType);
       expect(eventTypes).toContain('issue_assigned');
@@ -177,6 +177,8 @@ describe('Notifications API', () => {
       expect(eventTypes).toContain('mention');
       // So the settings page offers email for an agent's request for approval
       expect(eventTypes).toContain('agent:approval');
+      // And for what happens to a service account you own or manage
+      expect(eventTypes).toContain('service_account');
 
       for (const pref of res.body.preferences) {
         expect(pref.inApp).toBe(true);

@@ -14,6 +14,7 @@ import {
   assertBotRole,
   assertOwnerPresent,
   isBotUser,
+  lockServiceAccount,
   onOwnerLeft,
 } from '../service-accounts/bot-guards';
 import { canAccessSpace } from '../wiki/space-permissions.service';
@@ -248,13 +249,19 @@ export async function addTeamMember(
       },
     },
   } as const;
-  // A bot joins as at most a member, and only where one of its owners is (decision 9): checked
-  // and written under the bot's lock
+  // A bot joins as at most a member, and only where one of its owners is, who can also open every
+  // space of the team the bot now reaches (decisions 9 and 13). Locked first, written, then
+  // checked, so the team's team-role grants are seen as they apply to the bot
   if (await isBotUser(prisma, userId)) {
     assertBotRole(role);
     return prisma.$transaction(async (tx) => {
+      await lockServiceAccount(tx, userId);
+      const created = await tx.teamMembership.create({
+        data: { userId, teamId, role },
+        include,
+      });
       await assertOwnerPresent(userId, { teamId }, tx);
-      return tx.teamMembership.create({ data: { userId, teamId, role }, include });
+      return created;
     });
   }
 
@@ -276,7 +283,20 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
     }),
     'Team membership not found',
   );
-  if (await isBotUser(prisma, memberId)) assertBotRole(role);
+  // A bot's new role is at most MEMBER, and the spaces it opens with it need an owner who can
+  // open them too (team-role grants need not grow with the role)
+  if (await isBotUser(prisma, memberId)) {
+    assertBotRole(role);
+    return prisma.$transaction(async (tx) => {
+      await lockServiceAccount(tx, memberId);
+      const changed = await tx.teamMembership.update({
+        where: { id: membership.id },
+        data: { role },
+      });
+      await assertOwnerPresent(memberId, { teamId }, tx);
+      return changed;
+    });
+  }
 
   const updated = await prisma.teamMembership.update({
     where: { id: membership.id },

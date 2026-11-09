@@ -114,8 +114,8 @@ registerActions([
       await service.deleteServiceAccount(id);
     },
   }),
-  // An owner or an org admin stops a bot at once, and starts it again. For a token both wait for
-  // a person's approval, the bot's own token included
+  // An owner or an org admin stops a bot at once, and starts it again. A token of theirs waits for
+  // a person's approval; the bot's own token is neither, and is told the bot does not exist
   defineAction({
     name: 'serviceAccount.suspend',
     orgLevel: true,

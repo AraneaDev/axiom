@@ -279,6 +279,7 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
     }),
     ERR.MEMBERSHIP_NOT_FOUND,
   );
+  if (actorId) await assertCanManageOrgMember(orgId, actorId, membership.role);
   // A bot leaves its org only when it is deleted, with its tokens and requests
   const member = await prisma.user.findUnique({ where: { id: memberId }, select: { kind: true } });
   if (member?.kind === 'SERVICE') {
@@ -288,13 +289,15 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
       'SERVICE_ACCOUNT_MANAGED_BY_ORG',
     );
   }
-  if (actorId) await assertCanManageOrgMember(orgId, actorId, membership.role);
   // Everything the org granted goes with the membership, in one transaction: team
   // memberships (project access), space permissions and page allow-list entries naming the
   // user, issue watches (which would keep sending them notifications) and page stars. The
   // last-OWNER check runs under the OWNER lock in the same transaction.
   const inOrgTeams = { team: { orgId } };
   await withOwnersLocked(orgId, async (tx) => {
+    // The member's own org row first, before their team rows: a bot check holds an owner's org
+    // row and then reads their team rows, so taking them the other way round deadlocks
+    await tx.$queryRaw`SELECT id FROM org_memberships WHERE id = ${membership.id} FOR UPDATE`;
     const current = await tx.orgMembership.findUniqueOrThrow({ where: { id: membership.id } });
     if (current.role === 'OWNER') await assertNotLastOwnerTx(tx, orgId);
     await tx.teamMembership.deleteMany({ where: { userId: memberId, ...inOrgTeams } });

@@ -161,6 +161,8 @@ const DEFAULT_EVENT_TYPES = [
   'issue_commented',
   'mention',
   'agent:approval',
+  // A bot you own or manage left a place or lost its owners
+  'service_account',
 ] as const;
 
 /**

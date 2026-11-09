@@ -20,6 +20,7 @@ import {
   type TestUser,
 } from '../../test/factory';
 import { authDel, authGet, authPatch, authPost, authPut } from '../../test/helpers';
+import { removeOrgMember } from '../orgs/orgs.service';
 import { addTeamMember } from '../teams/teams.service';
 
 import { setOwners } from './service-accounts.service';
@@ -162,7 +163,32 @@ describe('service accounts: only where an owner is, and suspension', () => {
     !!(await prisma.teamMembership.findFirst({ where: { teamId: ctx.teamId, userId: id } }));
   const notices = (userId: string) =>
     prisma.notification.count({ where: { userId, type: NOTICE } });
-  const tokenWorks = async (raw: string) => (await withToken('get', '/api/orgs', raw)).status;
+  /**
+   * The token's answer: 200, or the status and code of a refusal.
+   * @param raw - The token
+   */
+  const tokenWorks = async (raw: string) => {
+    const res = await withToken('get', '/api/orgs', raw);
+    return res.status === 200 ? 200 : `${res.status} ${res.body.error?.code}`;
+  };
+  const SUSPENDED = '401 SERVICE_ACCOUNT_SUSPENDED';
+  /**
+   * A new team in the org, with these people in these roles.
+   * @param members - Who, in what team role
+   */
+  async function newTeam(members: Array<[string, 'ADMIN' | 'MEMBER' | 'VIEWER']>) {
+    const tag = `${++n}-${Date.now() % 1_000_000}`;
+    const team = await prisma.team.create({
+      data: { orgId: ctx.orgId, name: `Voorbeeld team ${tag}`, slug: `voorbeeld-team-${tag}` },
+    });
+    for (const [userId, role] of members) {
+      await prisma.teamMembership.create({ data: { teamId: team.id, userId, role } });
+    }
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: team.id, name: `Voorbeeld ruimte ${tag}`, slug: `voorbeeld-ruimte-${tag}` },
+    });
+    return { teamId: team.id, spaceId: space.id };
+  }
 
   beforeAll(async () => {
     ctx = await createTestContext('botguard');
@@ -330,14 +356,15 @@ describe('service accounts: only where an owner is, and suspension', () => {
 
   // ─── Owners leaving ──────────────────────────────────────
 
-  it('the last owner in a team leaves it: the bot leaves too, and two people hear of it', async () => {
+  it('the last owner in a team leaves it: the bot leaves too, told only to who can open the team', async () => {
     const owner = await person('MEMBER');
     const b = await bot([owner.id]);
     const before = await Promise.all([notices(owner.id), notices(teamAdmin.id)]);
     const res = await authDel(`/api/teams/${ctx.teamId}/members/${owner.id}`, ctx.owner.token);
     expect(res.status).toBe(204);
     expect(await inTeam(b.id)).toBe(false);
-    expect(await notices(owner.id)).toBe(before[0] + 1);
+    // The owner is out of the team now: the team's admin hears of it, the owner does not
+    expect(await notices(owner.id)).toBe(before[0]);
     expect(await notices(teamAdmin.id)).toBe(before[1] + 1);
     // Still an owner elsewhere: the bot is not suspended
     expect((await account(b.id)).status).toBe('ACTIVE');
@@ -390,7 +417,7 @@ describe('service accounts: only where an owner is, and suspension', () => {
     expect(row.suspendedAt).not.toBeNull();
     const approval = await prisma.agentApproval.findUniqueOrThrow({ where: { id: approvalId } });
     expect(approval.status).toBe('CANCELLED');
-    expect(await tokenWorks(b.token)).toBe(401);
+    expect(await tokenWorks(b.token)).toBe(SUSPENDED);
     expect(await prisma.serviceAccountOwner.count({ where: { serviceAccountId: b.id } })).toBe(0);
     // The org's owners and admins are told
     expect(await notices(ctx.owner.id)).toBe(before[0] + 1);
@@ -418,7 +445,7 @@ describe('service accounts: only where an owner is, and suspension', () => {
     const row = await account(b.id);
     expect(row.status).toBe('SUSPENDED');
     expect(row.suspendedReason).toBe('ORPHANED');
-    expect(await tokenWorks(b.token)).toBe(401);
+    expect(await tokenWorks(b.token)).toBe(SUSPENDED);
 
     // Resume refuses an orphan: it comes back with an owner
     const resume = await authPost(`/api/service-accounts/${b.id}/resume`, orgAdmin.token, {});
@@ -452,7 +479,7 @@ describe('service accounts: only where an owner is, and suspension', () => {
       const row = await account(b.id);
       expect(row.status, lapse).toBe('SUSPENDED');
       expect(row.suspendedReason, lapse).toBe('ORPHANED');
-      expect(await tokenWorks(b.token), lapse).toBe(401);
+      expect(await tokenWorks(b.token), lapse).toBe(SUSPENDED);
     }
   });
 
@@ -497,7 +524,7 @@ describe('service accounts: only where an owner is, and suspension', () => {
     const row = await account(b.id);
     expect(row.status).toBe('SUSPENDED');
     expect(row.suspendedReason).toBe('MANUAL');
-    expect(await tokenWorks(b.token)).toBe(401);
+    expect(await tokenWorks(b.token)).toBe(SUSPENDED);
     const approval = await prisma.agentApproval.findUniqueOrThrow({ where: { id: approvalId } });
     expect(approval.status).toBe('CANCELLED');
 
@@ -561,5 +588,141 @@ describe('service accounts: only where an owner is, and suspension', () => {
     await holder;
     await expect(call).rejects.toMatchObject({ code: 'SERVICE_ACCOUNT_OWNER_NOT_MEMBER' });
     expect(await inTeam(b.id)).toBe(false);
+  });
+
+  // ─── Fix round 1 ─────────────────────────────────────────
+
+  it('removeOrgMember takes the member row first: no deadlock with a check holding it', async () => {
+    const owner = await person('MEMBER');
+    await bot([owner.id]);
+    const row = await prisma.orgMembership.findFirstOrThrow({
+      where: { orgId: ctx.orgId, userId: owner.id },
+    });
+    // A bot check, in the order every check takes: the owner's org row, then their team row
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held!: () => void;
+    const isHeld = new Promise<void>((resolve) => (held = resolve));
+    const check = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM org_memberships WHERE id = ${row.id} FOR SHARE`;
+        held();
+        await gate;
+        await tx.$queryRaw`SELECT id FROM team_memberships WHERE "userId" = ${owner.id} FOR SHARE`;
+      },
+      { timeout: 10_000 },
+    );
+    await isHeld;
+    const removal = removeOrgMember(ctx.orgId, owner.id);
+    expect(await settledWithin(removal, 400)).toBe('pending');
+    release();
+    await expect(check).resolves.toBeUndefined();
+    await expect(removal).resolves.toBeUndefined();
+    expect(await prisma.orgMembership.count({ where: { id: row.id } })).toBe(0);
+  });
+
+  it('a manual suspension holds through an orphaning and a new owner: only resume lifts it', async () => {
+    const owner = await person('MEMBER');
+    const b = await bot([owner.id]);
+    const suspend = await authPost(`/api/service-accounts/${b.id}/suspend`, owner.token, {});
+    expect(suspend.status).toBe(200);
+    const removed = await authDel(`/api/orgs/${ctx.orgId}/members/${owner.id}`, ctx.owner.token);
+    expect(removed.status).toBe(204);
+    const orphaned = await account(b.id);
+    expect(orphaned.status).toBe('SUSPENDED');
+    expect(orphaned.suspendedReason).toBe('MANUAL');
+
+    const next = await person('MEMBER');
+    const set = await authPut(`/api/service-accounts/${b.id}/owners`, orgAdmin.token, {
+      ownerIds: [next.id],
+    });
+    expect(set.status).toBe(200);
+    expect((await account(b.id)).suspendedReason).toBe('MANUAL');
+    expect(await tokenWorks(b.token)).toBe(SUSPENDED);
+
+    const resume = await authPost(`/api/service-accounts/${b.id}/resume`, next.token, {});
+    expect(resume.status).toBe(200);
+    expect(await tokenWorks(b.token)).toBe(200);
+  });
+
+  it('decision 13: a team-role grant the owner is below takes the bot out of the team', async () => {
+    const owner = await person();
+    const b = await bot([owner.id], false);
+    // The owner is a team VIEWER, the bot a MEMBER: the space is open, both see it
+    const { teamId, spaceId: roleSpace } = await newTeam([
+      [owner.id, 'VIEWER'],
+      [b.id, 'MEMBER'],
+    ]);
+    const grant = await authPut(`/api/wiki/spaces/${roleSpace}/permissions`, ctx.owner.token, {
+      teamRole: 'MEMBER',
+      level: 'EDIT',
+    });
+    expect(grant.status).toBe(200);
+    // Now only MEMBERs open the space: the bot would, its owner can't
+    expect(await prisma.teamMembership.count({ where: { teamId, userId: b.id } })).toBe(0);
+
+    const add = await authPost(`/api/teams/${teamId}/members`, ctx.owner.token, {
+      userId: b.id,
+      role: 'MEMBER',
+    });
+    expect(add.status).toBe(400);
+    expect(add.body.error.code).toBe('SERVICE_ACCOUNT_OWNER_NOT_MEMBER');
+    expect(await prisma.teamMembership.count({ where: { teamId, userId: b.id } })).toBe(0);
+  });
+
+  it("an owner's lower team role takes the bot out of a space only that role opened", async () => {
+    const owner = await person();
+    const b = await bot([owner.id], false);
+    const { teamId, spaceId: s } = await newTeam([[owner.id, 'MEMBER']]);
+    await prisma.spacePermission.create({
+      data: { spaceId: s, teamRole: 'MEMBER', level: 'VIEW' },
+    });
+    const grant = await authPut(`/api/wiki/spaces/${s}/permissions`, ctx.owner.token, {
+      userId: b.id,
+      level: 'EDIT',
+    });
+    expect(grant.status).toBe(200);
+    const before = await notices(owner.id);
+    const demote = await authPatch(`/api/teams/${teamId}/members/${owner.id}`, ctx.owner.token, {
+      role: 'VIEWER',
+    });
+    expect(demote.status).toBe(200);
+    expect(await prisma.spacePermission.count({ where: { spaceId: s, userId: b.id } })).toBe(0);
+    // The owner can't open the space anymore, so isn't told its name
+    expect(await notices(owner.id)).toBe(before);
+  });
+
+  it('an org ADMIN owner made MEMBER takes the bot out of a space only that role opened', async () => {
+    const owner = await person(undefined, 'ADMIN');
+    const b = await bot([owner.id], false);
+    const { spaceId: s } = await newTeam([]);
+    await prisma.spacePermission.create({ data: { spaceId: s, teamRole: 'ADMIN', level: 'VIEW' } });
+    const grant = await authPut(`/api/wiki/spaces/${s}/permissions`, ctx.owner.token, {
+      userId: b.id,
+      level: 'EDIT',
+    });
+    expect(grant.status).toBe(200);
+    const demote = await authPatch(`/api/orgs/${ctx.orgId}/members/${owner.id}`, ctx.owner.token, {
+      role: 'MEMBER',
+    });
+    expect(demote.status).toBe(200);
+    expect(await prisma.spacePermission.count({ where: { spaceId: s, userId: b.id } })).toBe(0);
+    expect((await account(b.id)).status).toBe('ACTIVE');
+  });
+
+  it("a page's new view list that leaves the owner out takes the bot off the page", async () => {
+    const owner = await person('MEMBER');
+    const b = await bot([owner.id]);
+    const page = await prisma.page.create({
+      data: { spaceId, title: 'Voorbeeld lijst', slug: `voorbeeld-lijst-${++n}`, body: 'Hallo' },
+    });
+    const path = `/api/wiki/pages/${page.id}/restrictions`;
+    const edit = await authPut(path, ctx.owner.token, { type: 'EDIT', userIds: [b.id] });
+    expect(edit.status).toBe(200);
+    const view = await authPut(path, ctx.owner.token, { type: 'VIEW', userIds: [teamAdmin.id] });
+    expect(view.status).toBe(200);
+    expect(await prisma.pageRestriction.count({ where: { pageId: page.id, userId: b.id } })).toBe(
+      0,
+    );
   });
 });
