@@ -62,7 +62,7 @@ class SendTimeout extends Error {}
  * @param url - The URL
  * @param request - The request
  */
-const openDirect: PublicRequestDeps['open'] = (url, request) =>
+export const openDirect: PublicRequestDeps['open'] = (url, request) =>
   new Promise((resolve, reject) => {
     const { method, headers, body, signal } = request;
     const req =

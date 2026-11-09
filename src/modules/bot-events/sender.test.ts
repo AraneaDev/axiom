@@ -1,5 +1,8 @@
+import dnsCallback from 'dns';
 import dns from 'dns/promises';
-import type { IncomingMessage } from 'http';
+import http, { type IncomingMessage } from 'http';
+import { syncBuiltinESMExports } from 'module';
+import type { AddressInfo } from 'net';
 
 import { createId } from '@paralleldrive/cuid2';
 import type { Prisma } from '@prisma/client';
@@ -30,6 +33,7 @@ import {
   RETRY_DELAYS_MINUTES,
   SEND_TIMEOUT_MS,
   deliverDueEvents,
+  openDirect,
   sendTestEvent,
 } from './sender';
 import { verifySignature } from './sign';
@@ -420,6 +424,103 @@ describe('bot event sender', () => {
     release();
     expect(await first).toEqual({ sent: 1, failed: 0, dropped: 0 });
     expect(calls).toHaveLength(1);
+  });
+
+  describe('the real connector', () => {
+    const allowLocal = process.env.AXIOM_BOT_WEBHOOK_ALLOW_LOCAL;
+    afterEach(() => {
+      if (allowLocal === undefined) delete process.env.AXIOM_BOT_WEBHOOK_ALLOW_LOCAL;
+      else process.env.AXIOM_BOT_WEBHOOK_ALLOW_LOCAL = allowLocal;
+    });
+
+    it('does not follow a 302 from a local endpoint', async () => {
+      const hits: string[] = [];
+      const server = http.createServer((req, res) => {
+        hits.push(req.url ?? '');
+        req.resume();
+        res.writeHead(302, { Location: `http://127.0.0.1:${port}/elsewhere` }).end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as AddressInfo).port;
+      process.env.AXIOM_BOT_WEBHOOK_ALLOW_LOCAL = '1';
+      try {
+        const res = await openDirect(new URL(`http://127.0.0.1:${port}/direct`), {
+          method: 'POST',
+          body: '{}',
+          signal: new AbortController().signal,
+        });
+        expect(res.statusCode).toBe(302);
+        res.destroy();
+
+        await prisma.botWebhook.update({
+          where: { botId: botA },
+          data: { url: `http://127.0.0.1:${port}/hooks` },
+        });
+        const [id] = await queue(botA);
+        // No open given: the sender connects on its own
+        expect(await deliverDueEvents({ now: () => clock, botIds })).toEqual({
+          sent: 0,
+          failed: 1,
+          dropped: 0,
+        });
+        expect(await event(id)).toMatchObject({
+          lastStatusCode: 302,
+          lastError: 'redirect not followed',
+        });
+        expect(hits).toEqual(['/direct', '/hooks']);
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+
+    it('refuses a host that resolves to 10.0.0.1 when it connects', async () => {
+      const lookup = vi
+        .spyOn(dnsCallback, 'lookup')
+        .mockImplementation(((
+          _host: string,
+          _options: unknown,
+          callback: (err: null, addresses: { address: string; family: number }[]) => void,
+        ) => callback(null, [{ address: '10.0.0.1', family: 4 }])) as never);
+      syncBuiltinESMExports();
+      try {
+        const started = Date.now();
+        await expect(
+          openDirect(new URL('https://hooks.acme-labs.invalid/axiom'), {
+            method: 'POST',
+            body: '{}',
+            signal: new AbortController().signal,
+          }),
+        ).rejects.toMatchObject({ code: 'ERR_BLOCKED_ADDRESS' });
+        expect(lookup).toHaveBeenCalledWith(
+          'hooks.acme-labs.invalid',
+          expect.anything(),
+          expect.any(Function),
+        );
+        // Refused before any connection: 10.0.0.1 is never tried
+        expect(Date.now() - started).toBeLessThan(SEND_TIMEOUT_MS);
+
+        // Through the sender: public when checked, private when connected to
+        await prisma.botWebhook.update({
+          where: { botId: botA },
+          data: { url: 'https://hooks.acme-labs.invalid/axiom' },
+        });
+        vi.spyOn(dns, 'resolve4').mockResolvedValue(['93.184.216.34'] as never);
+        vi.spyOn(dns, 'resolve6').mockResolvedValue([] as never);
+        const [id] = await queue(botA);
+        expect(await deliverDueEvents({ now: () => clock, botIds })).toEqual({
+          sent: 0,
+          failed: 1,
+          dropped: 0,
+        });
+        expect(await event(id)).toMatchObject({
+          lastStatusCode: null,
+          lastError: 'address blocked',
+        });
+      } finally {
+        lookup.mockRestore();
+        syncBuiltinESMExports();
+      }
+    });
   });
 
   describe('worker shutdown', () => {
