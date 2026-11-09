@@ -65,6 +65,8 @@ Check the issue in the browser: the activity shows `via claude-code`.
 | -------------------- | ---------------------------------------------------------------------------- |
 | `401 TOKEN_REQUIRED` | You sent a session or JWT. Use `Authorization: Token tk_...`                 |
 | `403 SCOPE`          | The token lacks the area scope. Create a token with it                       |
+| `403 UI_ONLY`        | The action is web UI only. Do it in the browser                              |
+| `403 TOKEN_BLOCKED`  | No token runs this action, whatever its scopes. Do it in the browser         |
 | `403 INVALID_ORIGIN` | A browser origin that is not in `CORS_ORIGIN` or `FRONTEND_URL`              |
 | `405`                | `GET` and `DELETE` are not used. The server is stateless: `POST` only        |
 | `429 RATE_LIMITED`   | Wait a minute, see the limits in the [MCP server guide](axiom-mcp-server.md) |

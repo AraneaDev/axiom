@@ -71,7 +71,7 @@ Personal API tokens (`POST /api/users/me/tokens`) use the `Token` scheme:
 Authorization: Token tk_...
 ```
 
-A token acts as its owner, limited to its scopes. A request its scopes don't cover returns `403` with code `SCOPE`.
+A token acts as its owner, limited to its scopes. A request its scopes don't cover returns `403` with code `SCOPE`. An action only the web UI runs returns `403 UI_ONLY` to a token (and to a session that names it on `/api/act`), and one no token runs, whatever its scopes, returns `403 TOKEN_BLOCKED`.
 
 Each area has an `<area>:read` and an `<area>:write` scope. Write includes read within its own area only.
 
