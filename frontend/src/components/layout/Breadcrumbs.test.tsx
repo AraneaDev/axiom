@@ -6,6 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/api/orgs.api', () => ({ orgsApi: { list: vi.fn() } }));
 vi.mock('@/api/teams.api', () => ({ teamsApi: { listByOrg: vi.fn() } }));
 vi.mock('@/api/projects.api', () => ({ projectsApi: { listByTeam: vi.fn() } }));
+vi.mock('@/api/service-accounts.api', () => ({ serviceAccountsApi: { get: vi.fn() } }));
+
+import { orgsApi } from '@/api/orgs.api';
+import { serviceAccountsApi } from '@/api/service-accounts.api';
 
 import { Breadcrumbs } from './Breadcrumbs';
 
@@ -52,6 +56,42 @@ describe('Breadcrumbs on the account and admin pages', () => {
     expect(link).toHaveAttribute('href', `/${path.split('/')[1]}`);
     expect(screen.getByText(page)).toBeInTheDocument();
     expect(container.querySelector('.lucide-building-2')).toBeNull();
+    expect(container.querySelector('.lucide-users')).toBeNull();
+  });
+});
+
+describe('Breadcrumbs on the org settings pages', () => {
+  it("names a bot's page by the bot's display name, never its id", async () => {
+    vi.mocked(orgsApi.list).mockResolvedValue([
+      { id: 'org-1', slug: 'acme-labs', name: 'Acme Labs', role: 'OWNER' },
+    ] as never);
+    vi.mocked(serviceAccountsApi.get).mockResolvedValue({
+      id: 'cmw95deqx0001abc',
+      displayName: 'Triage bot',
+    } as never);
+    at('/acme-labs/settings/service-accounts/cmw95deqx0001abc');
+    expect(await screen.findByText('Triage bot')).toBeInTheDocument();
+    expect(screen.queryByText(/Cmw95deqx/i)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Service accounts' })).toHaveAttribute(
+      'href',
+      '/acme-labs/settings/service-accounts',
+    );
+    expect(screen.getByRole('link', { name: 'Org settings' })).toHaveAttribute(
+      'href',
+      '/acme-labs/settings',
+    );
+    expect(serviceAccountsApi.get).toHaveBeenCalledWith('cmw95deqx0001abc');
+  });
+
+  it('does not read the org settings as a team', () => {
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/acme-labs/settings/agent-approvals']}>
+          <Breadcrumbs />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText('Agent approvals')).toBeInTheDocument();
     expect(container.querySelector('.lucide-users')).toBeNull();
   });
 });

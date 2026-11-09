@@ -17,6 +17,7 @@ import { Link, useLocation, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
+import { serviceAccountsApi } from '@/api/service-accounts.api';
 import { teamsApi } from '@/api/teams.api';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
@@ -34,6 +35,12 @@ const TOP_LEVEL_META: Record<string, { icon: React.ElementType; label: string }>
   settings: { icon: Settings, label: 'Settings' },
   admin: { icon: Shield, label: 'Admin' },
   notifications: { icon: Bell, label: 'Notifications' },
+};
+
+/** The pages of an org's settings, by their path segment */
+const ORG_SETTINGS_PAGES: Record<string, string> = {
+  'service-accounts': 'Service accounts',
+  'agent-approvals': 'Agent approvals',
 };
 
 /**
@@ -79,15 +86,27 @@ export function Breadcrumbs() {
   const params = useParams();
 
   const segments = pathname.split('/').filter(Boolean);
+  // An org's own settings (/:org/settings/...): no team below the org, and pages named by the app
+  const isOrgSettingsRoute =
+    segments.length >= 2 && segments[1] === 'settings' && !TOP_LEVEL_META[segments[0]];
+  const orgSlug = params.org ?? (isOrgSettingsRoute ? segments[0] : undefined);
+  // A bot's page names the bot: the same read its page makes, so it comes from the cache there
+  const botId = isOrgSettingsRoute && segments[2] === 'service-accounts' ? segments[3] : undefined;
 
   // Fetch orgs (uses cache if available, fetches otherwise)
   const { data: orgs, isLoading: orgsLoading } = useQuery({
     queryKey: ['orgs'],
     queryFn: orgsApi.list,
     staleTime: STABLE_STALE_TIME,
-    enabled: !!params.org,
+    enabled: !!orgSlug,
   });
-  const currentOrg = orgs?.find((o) => o.slug === params.org);
+  const currentOrg = orgs?.find((o) => o.slug === orgSlug);
+
+  const { data: bot, isLoading: botLoading } = useQuery({
+    queryKey: ['service-account', botId],
+    queryFn: () => serviceAccountsApi.get(botId!),
+    enabled: !!botId,
+  });
 
   const { data: teams, isLoading: teamsLoading } = useQuery({
     queryKey: ['teams', currentOrg?.id],
@@ -136,6 +155,30 @@ export function Breadcrumbs() {
     crumbs.push({ label: 'Dashboards', path: '/dashboards', icon: LayoutDashboard });
   }
 
+  if (isOrgSettingsRoute) {
+    const orgPath = `/${segments[0]}`;
+    crumbs.push(
+      orgsLoading
+        ? { label: segments[0], path: orgPath, icon: Building2, loading: true }
+        : { label: currentOrg?.name ?? deSlugify(segments[0]), path: orgPath, icon: Building2 },
+    );
+    crumbs.push({ label: 'Org settings', path: `${orgPath}/settings`, icon: Settings });
+    if (segments[2]) {
+      crumbs.push({
+        label: ORG_SETTINGS_PAGES[segments[2]] ?? deSlugify(decodeURIComponent(segments[2])),
+        path: `${orgPath}/settings/${segments[2]}`,
+      });
+    }
+    if (botId) {
+      crumbs.push({
+        label: bot?.displayName ?? 'Service account',
+        path: pathname,
+        icon: Bot,
+        loading: botLoading,
+      });
+    }
+  }
+
   const topLevel = isAgentApprovalRoute ? undefined : TOP_LEVEL_META[segments[0]];
   if (topLevel) {
     crumbs.push({ label: topLevel.label, path: `/${segments[0]}`, icon: topLevel.icon });
@@ -147,7 +190,10 @@ export function Breadcrumbs() {
     });
   }
 
-  (isDashboardRoute || isAgentApprovalRoute || topLevel ? [] : segments).forEach((seg, i) => {
+  (isDashboardRoute || isAgentApprovalRoute || isOrgSettingsRoute || topLevel
+    ? []
+    : segments
+  ).forEach((seg, i) => {
     const path = '/' + segments.slice(0, i + 1).join('/');
 
     // Segment 0: org
@@ -221,7 +267,10 @@ export function Breadcrumbs() {
   });
 
   return (
-    <nav className="flex items-center gap-1 text-sm text-text-tertiary mb-4">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex items-center gap-1 text-sm text-text-tertiary mb-4"
+    >
       <Link to="/" className="hover:text-text transition-colors">
         <Home className="h-3.5 w-3.5" />
       </Link>
