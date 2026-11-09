@@ -362,6 +362,9 @@ export async function assertPlacesKept(tx: Tx, botId: string, owners: string[]):
   }
 }
 
+/** Owner rows a check removes first: one person's, or those of everyone no longer eligible */
+type Drop = { ownerId: string } | 'lapsed';
+
 /** What happened to a bot's ownership in one check */
 type OwnerChange = 'orphaned' | 'ownerless' | null;
 
@@ -434,20 +437,30 @@ async function leave(tx: Tx, botId: string, p: BotPlace): Promise<BotPlace[]> {
  * the bot when it has no owner at all.
  * @param botId - The bot's user id
  * @param scope - Which places
- * @param dropOwner - An owner to remove first, whose ownership lapsed
+ * @param drop - Owner rows to remove first: one whose ownership lapsed, or every lapsed one
  */
-async function reconcile(botId: string, scope: Scope, dropOwner?: string): Promise<void> {
+async function reconcile(botId: string, scope: Scope, drop?: Drop): Promise<void> {
   const outcome = await prisma.$transaction(async (tx): Promise<Outcome | null> => {
     const account = await lockServiceAccount(tx, botId);
     if (!account) return null;
     let lostOwner = false;
-    if (dropOwner) {
+    if (drop && drop !== 'lapsed') {
       const gone = await tx.serviceAccountOwner.deleteMany({
-        where: { serviceAccountId: botId, ownerId: dropOwner },
+        where: { serviceAccountId: botId, ownerId: drop.ownerId },
       });
       lostOwner = gone.count > 0;
     }
-    const owners = await lockEligibleOwners(tx, account.orgId, await ownerRowIds(tx, botId));
+    const rowIds = await ownerRowIds(tx, botId);
+    const owners = await lockEligibleOwners(tx, account.orgId, rowIds);
+    if (drop === 'lapsed') {
+      const lapsed = rowIds.filter((id) => !owners.includes(id));
+      if (lapsed.length > 0) {
+        await tx.serviceAccountOwner.deleteMany({
+          where: { serviceAccountId: botId, ownerId: { in: lapsed } },
+        });
+        lostOwner = true;
+      }
+    }
     const outcome: Outcome = {
       botId,
       orgId: account.orgId,
@@ -544,10 +557,10 @@ async function safely(what: string, work: () => Promise<void>): Promise<void> {
  * Check one bot, logging a failure.
  * @param botId - The bot's user id
  * @param scope - Which places
- * @param dropOwner - An owner whose ownership lapsed
+ * @param drop - Owner rows to remove first
  */
-function recheck(botId: string, scope: Scope, dropOwner?: string): Promise<void> {
-  return safely(`bot ${botId}`, () => reconcile(botId, scope, dropOwner));
+function recheck(botId: string, scope: Scope, drop?: Drop): Promise<void> {
+  return safely(`bot ${botId}`, () => reconcile(botId, scope, drop));
 }
 
 /**
@@ -662,7 +675,9 @@ export async function onPageChanged(pageId: string): Promise<void> {
  */
 export async function onOwnershipLapse(userId: string, orgId: string): Promise<void> {
   await safely(`lapse ${userId}`, async () => {
-    for (const botId of await botsOwnedIn(userId, orgId)) await recheck(botId, 'all', userId);
+    for (const botId of await botsOwnedIn(userId, orgId)) {
+      await recheck(botId, 'all', { ownerId: userId });
+    }
   });
 }
 
@@ -700,4 +715,21 @@ export async function onOwnershipLapseEverywhere(userId: string): Promise<void> 
  */
 export async function recheckBots(botIds: string[]): Promise<void> {
   for (const botId of botIds) await recheck(botId, 'all');
+}
+
+/**
+ * The hourly backstop for the hooks above, which log and move on when they fail: every active
+ * bot drops the owner rows of people who can no longer own it, leaves each team, space and page
+ * none of its owners can open, and is suspended as ORPHANED when no owner is left. The same
+ * check the hooks run, over every place; one bot's failure is logged and the next is checked.
+ * @returns How many bots were checked
+ */
+export async function sweepServiceAccounts(): Promise<number> {
+  const bots = await prisma.serviceAccount.findMany({
+    where: { status: 'ACTIVE' },
+    select: { userId: true },
+    orderBy: { userId: 'asc' },
+  });
+  for (const { userId } of bots) await recheck(userId, 'all', 'lapsed');
+  return bots.length;
 }

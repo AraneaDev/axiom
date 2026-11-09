@@ -14,6 +14,8 @@ import { cleanupAutomationMarks } from './modules/github/github-automation';
 import { runDueImports } from './modules/github/import-run.service';
 import { reconcileDueRepos } from './modules/github/reconcile.service';
 import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
+import { sweepServiceAccounts } from './modules/service-accounts/bot-guards';
+import { notifyExpiringBotTokens } from './modules/service-accounts/token-expiry.job';
 import { closeRealtimePublisher, setRealtimeMode } from './realtime/bridge';
 import { logger } from './utils/logger';
 
@@ -22,9 +24,11 @@ const APPROVAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 const GITHUB_RECONCILE_TICK_MS = 60 * 1000;
 const GITHUB_MARK_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const GITHUB_IMPORT_TICK_MS = 15 * 1000;
+const SERVICE_ACCOUNT_INTERVAL_MS = 60 * 60 * 1000;
 let reconcileRunning = false;
 let importRunning = false;
 let markCleanupRunning = false;
+let serviceAccountsRunning = false;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
 function runUploadCleanup(): void {
@@ -94,6 +98,26 @@ function runGithubMarkCleanup(): void {
     });
 }
 
+/**
+ * Tell owners of bot tokens two weeks from expiry, then sweep every active bot for a place none
+ * of its owners can open or an owner who lapsed; one run at a time, a failure waits an hour.
+ */
+function runServiceAccountJobs(): void {
+  if (serviceAccountsRunning) return;
+  serviceAccountsRunning = true;
+  notifyExpiringBotTokens()
+    .catch((err) => {
+      logger.error('Bot token expiry notices failed', {}, err as Error);
+    })
+    .then(() => sweepServiceAccounts())
+    .catch((err) => {
+      logger.error('Service account sweep failed', {}, err as Error);
+    })
+    .finally(() => {
+      serviceAccountsRunning = false;
+    });
+}
+
 async function main(): Promise<void> {
   assertRedisEnabled();
   // The worker has no sockets: what it stores reaches browsers through the API over Redis
@@ -125,6 +149,9 @@ async function main(): Promise<void> {
   runGithubMarkCleanup();
   const githubMarkCleanup = setInterval(runGithubMarkCleanup, GITHUB_MARK_CLEANUP_INTERVAL_MS);
 
+  runServiceAccountJobs();
+  const serviceAccounts = setInterval(runServiceAccountJobs, SERVICE_ACCOUNT_INTERVAL_MS);
+
   logger.info('Axiom worker running');
 
   const shutdown = async (signal: string) => {
@@ -135,6 +162,7 @@ async function main(): Promise<void> {
     clearInterval(githubReconcile);
     clearInterval(githubImports);
     clearInterval(githubMarkCleanup);
+    clearInterval(serviceAccounts);
     closeRealtimePublisher();
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
