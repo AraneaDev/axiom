@@ -41,9 +41,9 @@ test.describe('Settings', () => {
 
   test('org settings page loads', async ({ page }) => {
     await page.goto(`/${ORG}/settings`);
-    await expect(
-      page.getByRole('heading', { name: /settings/i }).first()
-        .or(page.getByText(/settings/i).first())
-    ).toBeVisible({ timeout: 10_000 });
+    // The org settings nav, with its first section
+    await expect(page.getByRole('link', { name: 'Service accounts' })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 });
