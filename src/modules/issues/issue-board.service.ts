@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { cacheable } from '../../config/redis';
+import { getRequestContext } from '../../lib/request-context';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -8,6 +9,7 @@ import { formatIssueKey } from '../../utils/issue-key';
 import { logger } from '../../utils/logger';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
+import { emitIssueEvents } from '../bot-events/emit';
 
 import { assertColumnTransition, assertIssueRefsInProject } from './issue-references';
 
@@ -94,6 +96,17 @@ export async function moveIssue(
 
   await invalidateIssueCache(projectId);
 
+  // The mover is the request's user; with none (a script), the issue's creator stands in for
+  // automation as before, and a bot event names no actor
+  const moverId = getRequestContext()?.userId;
+  if (columnId !== issue.columnId) {
+    await emitIssueEvents({
+      issueId: issue.id,
+      actorId: moverId ?? null,
+      status: { fromColumnId: issue.columnId, toColumnId: columnId },
+    });
+  }
+
   // Fire automation rules (non-blocking)
   if (columnId !== issue.columnId && !options?.skipAutomation) {
     prisma.issue
@@ -102,7 +115,7 @@ export async function moveIssue(
         if (hydrated) {
           return evaluateRules(projectId, 'issue:status_changed', {
             issue: hydrated,
-            actorId: issue.creatorId,
+            actorId: moverId ?? issue.creatorId,
             from: issue.columnId,
             to: columnId,
           });

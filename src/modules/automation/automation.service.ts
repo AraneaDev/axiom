@@ -7,6 +7,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
 import { logger } from '../../utils/logger';
+import { emitIssueEvents } from '../bot-events/emit';
 import type { GithubTriggerContext } from '../github/github-automation';
 import { safeGithubContext } from '../github/github-template';
 import {
@@ -437,21 +438,38 @@ async function executeActions(
             });
             // issue:updated also refreshes an open issue page, which board:moved does not
             await told(projectId, issue.id, 'issue:updated');
+            await emitIssueEvents({
+              issueId: issue.id,
+              actorId: context.actorId,
+              status: { fromColumnId: current?.columnId ?? null, toColumnId: action.columnId },
+            });
           }
           break;
         case 'set_assignee':
           if (action.userId) {
             // Checked again here: the assignee may have left the team since the rule was saved
             await assertAssignable(projectId, action.userId);
+            const before = await prisma.issue.findUnique({
+              where: { id: issue.id },
+              select: { assigneeId: true },
+            });
             await prisma.issue.update({
               where: { id: issue.id },
               data: { assigneeId: action.userId },
             });
             await told(projectId, issue.id, 'issue:updated');
+            await emitIssueEvents({
+              issueId: issue.id,
+              actorId: context.actorId,
+              assignee: { from: before?.assigneeId ?? null, to: action.userId },
+            });
           }
           break;
         case 'add_label':
           if (action.name) {
+            const had = await prisma.label.count({
+              where: { projectId, name: action.name, issues: { some: { id: issue.id } } },
+            });
             await prisma.issue.update({
               where: { id: issue.id },
               data: {
@@ -464,6 +482,13 @@ async function executeActions(
               },
             });
             await told(projectId, issue.id, 'issue:updated');
+            if (had === 0) {
+              await emitIssueEvents({
+                issueId: issue.id,
+                actorId: context.actorId,
+                changedFields: ['labels'],
+              });
+            }
           }
           break;
         case 'add_comment':
@@ -471,7 +496,7 @@ async function executeActions(
             const commentBody = action.body;
             const write = async () => {
               const resolvedBody = resolveTemplate(commentBody, markdownCtx);
-              await prisma.comment.create({
+              const comment = await prisma.comment.create({
                 data: {
                   issueId: issue.id,
                   authorId: context.actorId,
@@ -479,6 +504,11 @@ async function executeActions(
                 },
               });
               await told(projectId, issue.id, 'comment:added');
+              await emitIssueEvents({
+                issueId: issue.id,
+                actorId: context.actorId,
+                commentId: comment.id,
+              });
             };
             if (context.commentGuard) await context.commentGuard(write);
             else await write();
@@ -492,7 +522,7 @@ async function executeActions(
               String(action.value),
               action.field === 'body' ? markdownCtx : templateCtx,
             );
-            await applySetField(projectId, issue.id, action.field, resolvedValue);
+            await applySetField(projectId, issue.id, action.field, resolvedValue, context.actorId);
             await told(projectId, issue.id, 'issue:updated');
           }
           break;

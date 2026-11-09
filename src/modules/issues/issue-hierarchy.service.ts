@@ -4,6 +4,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { formatIssueKey } from '../../utils/issue-key';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { emitIssueEvents } from '../bot-events/emit';
 
 import { findIssueOrThrow } from './issue-utils';
 
@@ -24,7 +25,7 @@ export async function setParent(
   const issue = await findIssueOrThrow(projectId, issueNumber);
 
   if (parentIssueNumber === null) {
-    return prisma.issue.update({
+    const updated = await prisma.issue.update({
       where: { id: issue.id },
       data: { parentId: null },
       include: {
@@ -33,6 +34,8 @@ export async function setParent(
         column: true,
       },
     });
+    if (issue.parentId) await emitIssueEvents({ issueId: issue.id, changedFields: ['parent'] });
+    return updated;
   }
 
   const parent = await findOrThrow(
@@ -54,7 +57,7 @@ export async function setParent(
     current = next;
   }
 
-  return prisma.issue.update({
+  const updated = await prisma.issue.update({
     where: { id: issue.id },
     data: { parentId: parent.id },
     include: {
@@ -63,6 +66,10 @@ export async function setParent(
       column: true,
     },
   });
+  if (issue.parentId !== parent.id) {
+    await emitIssueEvents({ issueId: issue.id, changedFields: ['parent'] });
+  }
+  return updated;
 }
 
 /**

@@ -8,6 +8,7 @@
 import { prisma } from '../../config/database';
 import { typedCustomFieldValue } from '../../lib/query-engine';
 import { AppError } from '../../middleware/errorHandler';
+import { emitIssueEvents } from '../bot-events/emit';
 import { assertCustomFieldValue } from '../custom-fields/custom-field-values';
 
 const PRIORITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
@@ -110,6 +111,7 @@ async function customDefinition(projectId: string, name: string) {
  * @param issueId - The issue
  * @param field - The action's field
  * @param value - The resolved value
+ * @param actorId - Who the rule runs as: the actor of the bot event the write sends
  * @throws {AppError} 400 when the field or value isn't allowed
  */
 export async function applySetField(
@@ -117,6 +119,7 @@ export async function applySetField(
   issueId: string,
   field: string,
   value: string,
+  actorId: string | null,
 ): Promise<void> {
   if (field.startsWith(CUSTOM_PREFIX)) {
     const definition = await customDefinition(projectId, field.slice(CUSTOM_PREFIX.length));
@@ -127,6 +130,8 @@ export async function applySetField(
       create: { issueId, fieldDefinitionId: definition.id, ...typedCustomFieldValue(value) },
       update: typedCustomFieldValue(value),
     });
+    // A custom field's name is the project's own text: the event names the kind, not the field
+    await emitIssueEvents({ issueId, actorId, changedFields: ['customFields'] });
     return;
   }
   const parse = Object.hasOwn(CONTENT_FIELDS, field) ? CONTENT_FIELDS[field] : undefined;
@@ -138,4 +143,5 @@ export async function applySetField(
     throw new AppError(400, `set_field ${field} ${(err as Error).message}`);
   }
   await prisma.issue.update({ where: { id: issueId }, data: { [field]: parsed } });
+  await emitIssueEvents({ issueId, actorId, changedFields: [field] });
 }

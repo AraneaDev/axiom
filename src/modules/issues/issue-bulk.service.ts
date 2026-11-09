@@ -7,6 +7,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
 import { ISSUE_WITH_COLUMN_INCLUDE } from '../../utils/prisma-selects';
+import { emitIssueEvents } from '../bot-events/emit';
 
 import {
   assertAssignable,
@@ -44,7 +45,14 @@ export async function bulkUpdate(
 
   const issues = await prisma.issue.findMany({
     where: { id: { in: issueIds }, projectId },
-    select: { id: true, columnId: true },
+    select: {
+      id: true,
+      columnId: true,
+      assigneeId: true,
+      priority: true,
+      sprintId: true,
+      labels: { select: { name: true } },
+    },
   });
   if (issues.length === 0) throw new AppError(404, 'No matching issues found');
 
@@ -133,5 +141,35 @@ export async function bulkUpdate(
   });
 
   await invalidateIssueCache(projectId);
+
+  // One bot event check per issue, each with what changed on that issue
+  for (const before of issues) {
+    const fields: string[] = [];
+    if (updates.priority !== undefined && updates.priority !== before.priority) {
+      fields.push('priority');
+    }
+    if (updates.sprintId !== undefined && (updates.sprintId ?? null) !== before.sprintId) {
+      fields.push('sprint');
+    }
+    if (updates.labels !== undefined) {
+      const prev = [...new Set(before.labels.map((l) => l.name))].sort().join('\n');
+      if (prev !== [...new Set(updates.labels)].sort().join('\n')) fields.push('labels');
+    }
+    const assigneeTo = updates.assigneeId === undefined ? undefined : (updates.assigneeId ?? null);
+    await emitIssueEvents({
+      issueId: before.id,
+      actorId: userId,
+      assignee:
+        assigneeTo !== undefined && assigneeTo !== before.assigneeId
+          ? { from: before.assigneeId, to: assigneeTo }
+          : undefined,
+      status:
+        updates.status !== undefined && updates.status !== before.columnId
+          ? { fromColumnId: before.columnId, toColumnId: updates.status }
+          : undefined,
+      changedFields: fields.sort(),
+    });
+  }
+
   return { updated: results.length, issues: results };
 }

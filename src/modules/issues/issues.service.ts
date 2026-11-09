@@ -22,6 +22,7 @@ import { MAX_DB_INT } from '../../utils/validation/common-validators';
 import { logActivity } from '../activity/activity.service';
 import { bindStagedAttachments } from '../attachments/upload-intents.service';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
+import { emitIssueEvents } from '../bot-events/emit';
 import { createNotification } from '../notifications/notifications.service';
 import { resolveQueryFields } from '../search/query-fields.service';
 
@@ -203,6 +204,14 @@ export async function createIssue(
           err as Error,
         );
       });
+  }
+
+  if (data.assigneeId) {
+    await emitIssueEvents({
+      issueId: issue.id,
+      actorId: creatorId,
+      assignee: { from: null, to: data.assigneeId },
+    });
   }
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:created', projectId, issueId: issue.id });
@@ -425,6 +434,67 @@ export async function columnIdForStatus(projectId: string, status: string): Prom
   );
 }
 
+type FieldsBefore = {
+  title: string;
+  body: string;
+  type: string;
+  priority: string;
+  dueDate: Date | null;
+  storyPoints: number | null;
+  sprintId: string | null;
+  timeEstimate: number | null;
+  timeSpent: number | null;
+};
+
+type FieldsUpdate = {
+  title?: string;
+  body?: string;
+  type?: string;
+  priority?: string;
+  dueDate?: string;
+  labels?: string[];
+  storyPoints?: number | null;
+  sprintId?: string | null;
+  timeEstimate?: number | null;
+  timeSpent?: number | null;
+};
+
+/**
+ * The issue fields an update changed, sorted, as a bot event names them. Assignee, status and
+ * position are not fields here.
+ * @param before - The issue before the update
+ * @param previousLabels - Its label names before the update
+ * @param data - The update
+ */
+function changedIssueFields(
+  before: FieldsBefore,
+  previousLabels: string[],
+  data: FieldsUpdate,
+): string[] {
+  const fields: string[] = [];
+  const differs = <T>(next: T | undefined, prev: T) => next !== undefined && next !== prev;
+  if (differs(data.title, before.title)) fields.push('title');
+  if (differs(data.body, before.body)) fields.push('body');
+  if (differs(data.type, before.type)) fields.push('type');
+  if (differs(data.priority, before.priority)) fields.push('priority');
+  if (differs(data.storyPoints, before.storyPoints)) fields.push('storyPoints');
+  if (differs(data.timeEstimate, before.timeEstimate)) fields.push('timeEstimate');
+  if (differs(data.timeSpent, before.timeSpent)) fields.push('timeSpent');
+  if (data.sprintId !== undefined && (data.sprintId || null) !== before.sprintId) {
+    fields.push('sprint');
+  }
+  if (data.dueDate !== undefined) {
+    const next = data.dueDate ? new Date(data.dueDate).getTime() : null;
+    if (next !== (before.dueDate?.getTime() ?? null)) fields.push('dueDate');
+  }
+  if (data.labels !== undefined) {
+    const prev = [...new Set(previousLabels)].sort().join('\n');
+    const next = [...new Set(data.labels)].sort().join('\n');
+    if (prev !== next) fields.push('labels');
+  }
+  return fields.sort();
+}
+
 /**
  * Update an existing issue with partial data, logging granular activity events and firing automation rules.
  * @param projectId - The project the issue belongs to
@@ -632,6 +702,20 @@ export async function updateIssue(
         logger.error('Failed to hydrate issue for automation rules', { projectId }, err as Error);
       });
   }
+
+  await emitIssueEvents({
+    issueId: issue.id,
+    actorId: userId,
+    assignee:
+      data.assigneeId !== undefined && (data.assigneeId || null) !== issue.assigneeId
+        ? { from: issue.assigneeId, to: data.assigneeId || null }
+        : undefined,
+    status:
+      data.columnId !== undefined && data.columnId !== issue.columnId
+        ? { fromColumnId: issue.columnId, toColumnId: data.columnId }
+        : undefined,
+    changedFields: changedIssueFields(issue, previousLabels, data),
+  });
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId: issue.id });
 

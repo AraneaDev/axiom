@@ -10,6 +10,7 @@ import { notifyMentions } from '../../utils/mention-notifier';
 import { TEAM_ORG_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { bindStagedAttachments } from '../attachments/upload-intents.service';
+import { emitIssueEvents } from '../bot-events/emit';
 import { createNotification } from '../notifications/notifications.service';
 
 /**
@@ -95,6 +96,8 @@ export async function addComment(
       issueId,
     });
   }
+
+  await emitIssueEvents({ issueId, actorId: authorId, commentId: comment.id });
 
   return comment;
 }

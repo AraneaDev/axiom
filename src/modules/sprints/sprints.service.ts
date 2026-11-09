@@ -8,6 +8,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { formatIssueKey } from '../../utils/issue-key';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { emitIssueEvents } from '../bot-events/emit';
 
 type BasicUser = { id: string; username: string; displayName: string };
 type IssueWithRelations = Issue & {
@@ -325,7 +326,7 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
   // Only the project's own issues: ids from elsewhere are ignored, history included
   const ownIssues = await prisma.issue.findMany({
     where: { id: { in: issueIds }, projectId: sprint.projectId },
-    select: { id: true },
+    select: { id: true, sprintId: true },
   });
   const ownIds = ownIssues.map((i) => i.id);
   await prisma.issue.updateMany({
@@ -337,6 +338,12 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
   await prisma.sprintIssueHistory.createMany({
     data: ownIds.map((issueId) => ({ sprintId, issueId, action: 'ADDED' as const })),
   });
+
+  for (const issue of ownIssues) {
+    if (issue.sprintId !== sprintId) {
+      await emitIssueEvents({ issueId: issue.id, changedFields: ['sprint'] });
+    }
+  }
 
   return getSprint(sprintId);
 }
@@ -360,10 +367,12 @@ export async function removeIssueFromSprint(issueId: string) {
     });
   }
 
-  return prisma.issue.update({
+  const updated = await prisma.issue.update({
     where: { id: issueId },
     data: { sprintId: null },
   });
+  if (issue.sprintId) await emitIssueEvents({ issueId, changedFields: ['sprint'] });
+  return updated;
 }
 
 /**

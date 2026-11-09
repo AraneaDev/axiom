@@ -9,6 +9,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
+import { emitIssueEvents } from '../bot-events/emit';
 import { entryColumnIds } from '../issues/issue-references';
 import { createNotification } from '../notifications/notifications.service';
 import { isServiceAccount } from '../service-accounts/person';
@@ -578,6 +579,13 @@ export async function castVote(
         toColumnId: request.targetColumnId,
         via: 'approval',
         requestId,
+      });
+
+      // The voter whose approval made the move is its actor
+      await emitIssueEvents({
+        issueId: issue.id,
+        actorId: userId,
+        status: { fromColumnId: issue.columnId, toColumnId: request.targetColumnId },
       });
 
       // Notify requester
