@@ -1,0 +1,571 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bot,
+  Check,
+  Clock,
+  KeyRound,
+  PauseCircle,
+  Pencil,
+  PlayCircle,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
+
+import { agentApprovalsApi } from '@/api/agent-approvals.api';
+import {
+  serviceAccountError,
+  serviceAccountsApi,
+  type ServiceAccountDetail as Detail,
+} from '@/api/service-accounts.api';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
+import { Card } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
+import { SettingsPage } from '@/components/ui/SettingsPage';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Textarea } from '@/components/ui/Textarea';
+import { ViaLabel } from '@/components/ui/ViaLabel';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { formatDate, formatRelative } from '@/lib/utils';
+
+import { isOrphaned, ServiceAccountStatusBadge, useOrgOfPage } from './service-account-shared';
+import { ServiceAccountOwnerPicker } from './ServiceAccountOwnerPicker';
+
+/** What an activity's action reads as, after the bot's name */
+const ACTION_LABELS: Record<string, string> = {
+  created: 'created',
+  updated: 'updated',
+  status_changed: 'changed the status of',
+  assigned: 'assigned',
+  unassigned: 'unassigned',
+  commented: 'commented on',
+  closed: 'closed',
+  labeled: 'labeled',
+  priority_changed: 'changed the priority of',
+  type_changed: 'changed the type of',
+  deleted: 'deleted',
+  time_logged: 'logged time on',
+};
+
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * One bot: its status, description, owners, memberships, tokens, waiting requests and recent
+ * activity. Org admins change it; its owners read it and suspend or resume it.
+ */
+export default function ServiceAccountDetail() {
+  const { id = '' } = useParams();
+  const { slug, org, isAdmin } = useOrgOfPage();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const key = ['service-account', id];
+
+  const {
+    data: bot,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: key,
+    queryFn: () => serviceAccountsApi.get(id),
+    enabled: !!id,
+  });
+
+  const [confirm, setConfirm] = useState<'suspend' | 'resume' | 'delete' | null>(null);
+  // The owners being edited, or null: "Add an owner" on an orphan opens the same editor
+  const [ownersDraft, setOwnersDraft] = useState<string[] | null>(null);
+
+  const onChanged = (next: Detail) => {
+    queryClient.setQueryData(key, next);
+    void queryClient.invalidateQueries({ queryKey: ['service-accounts'] });
+  };
+
+  const suspend = useMutationWithToast(() => serviceAccountsApi.suspend(id), {
+    successMessage: 'Service account suspended',
+    errorMessage: null,
+    onSuccess: (next) => {
+      setConfirm(null);
+      onChanged(next);
+    },
+  });
+  const resume = useMutationWithToast(() => serviceAccountsApi.resume(id), {
+    successMessage: 'Service account resumed',
+    errorMessage: null,
+    onSuccess: (next) => {
+      setConfirm(null);
+      onChanged(next);
+    },
+  });
+  const remove = useMutationWithToast(() => serviceAccountsApi.delete(id), {
+    successMessage: 'Service account deleted',
+    errorMessage: null,
+    invalidateKeys: [['service-accounts']],
+    onSuccess: () => {
+      setConfirm(null);
+      navigate(`/${slug}/settings/service-accounts`);
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  if (error || !bot) {
+    return (
+      <EmptyState
+        icon={<AlertTriangle />}
+        title="Service account not available"
+        description={serviceAccountError(error, 'It could not be loaded.')}
+        action={
+          <ButtonLink to={`/${slug}/settings/service-accounts`} variant="secondary" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5" /> Service accounts
+          </ButtonLink>
+        }
+      />
+    );
+  }
+
+  const orphaned = isOrphaned(bot);
+  const suspended = bot.status === 'SUSPENDED';
+  const actionError = suspend.error ?? resume.error ?? remove.error;
+
+  return (
+    <SettingsPage
+      title={bot.displayName}
+      description={`@${bot.username} · service account in ${org?.name ?? slug}`}
+      icon={Bot}
+      actions={
+        <>
+          <ButtonLink to={`/${slug}/settings/service-accounts`} variant="ghost" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5" /> All
+          </ButtonLink>
+          {bot.status === 'ACTIVE' && (
+            <Button variant="secondary" size="sm" onClick={() => setConfirm('suspend')}>
+              <PauseCircle className="h-3.5 w-3.5" /> Suspend
+            </Button>
+          )}
+          {suspended && !orphaned && (
+            <Button variant="secondary" size="sm" onClick={() => setConfirm('resume')}>
+              <PlayCircle className="h-3.5 w-3.5" /> Resume
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="danger" size="sm" onClick={() => setConfirm('delete')}>
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+        <div className="flex flex-col gap-6 min-w-0">
+          <StatusCard
+            bot={bot}
+            onAddOwner={isAdmin ? () => setOwnersDraft(bot.owners.map((o) => o.id)) : undefined}
+          />
+          {actionError && (
+            <ErrorAlert error={new Error(serviceAccountError(actionError))} fallback="" />
+          )}
+          <DescriptionCard bot={bot} isAdmin={isAdmin} onChanged={onChanged} />
+          <TokensCard bot={bot} />
+          <ActivityCard botId={bot.id} />
+        </div>
+        <div className="flex flex-col gap-6 min-w-0">
+          <OwnersCard
+            bot={bot}
+            isAdmin={isAdmin}
+            draft={ownersDraft}
+            onDraftChange={setOwnersDraft}
+            onChanged={onChanged}
+          />
+          <MembershipsCard bot={bot} orgSlug={slug} />
+          <RequestsCard botId={bot.id} />
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirm === 'suspend'}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => suspend.mutate()}
+        loading={suspend.isPending}
+        variant="warning"
+        title={`Suspend ${bot.displayName}?`}
+        description="Its tokens stop working at once and its waiting requests are cancelled. Resume it to start it again."
+        confirmLabel="Suspend"
+      />
+      <ConfirmDialog
+        open={confirm === 'resume'}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => resume.mutate()}
+        loading={resume.isPending}
+        variant="warning"
+        title={`Resume ${bot.displayName}?`}
+        description="Its tokens work again. Each team, space and page it is in needs an owner who can open it."
+        confirmLabel="Resume"
+      />
+      <ConfirmDialog
+        open={confirm === 'delete'}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => remove.mutate()}
+        loading={remove.isPending}
+        title={`Delete ${bot.displayName}?`}
+        description={
+          `This removes its ${plural(bot.tokens.length, 'token')}, its place in ` +
+          `${plural(bot.teams.length, 'team')} and ${plural(bot.spaces.length, 'space')}, ` +
+          `its ${plural(bot.owners.length, 'owner')} and its waiting requests. Its past ` +
+          'comments, issues and activity stay under its name.'
+        }
+        confirmLabel="Delete"
+      />
+    </SettingsPage>
+  );
+}
+
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-text">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function StatusCard({ bot, onAddOwner }: { bot: Detail; onAddOwner?: () => void }) {
+  const orphaned = isOrphaned(bot);
+  return (
+    <Card className="flex flex-wrap items-center gap-3 p-5">
+      <ServiceAccountStatusBadge bot={bot} />
+      <p className="flex-1 text-sm text-text-secondary">
+        {bot.status === 'ACTIVE'
+          ? 'Its tokens work, within the rights of its memberships.'
+          : orphaned
+            ? 'It lost its last owner, so its tokens stop working. A new owner resumes it.'
+            : `Suspended by hand${bot.suspendedAt ? ` on ${formatDate(bot.suspendedAt)}` : ''}. Its tokens stop working until it is resumed.`}
+      </p>
+      {orphaned && onAddOwner && (
+        <Button size="sm" onClick={onAddOwner}>
+          <UserPlus className="h-3.5 w-3.5" /> Add an owner
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+function DescriptionCard({
+  bot,
+  isAdmin,
+  onChanged,
+}: {
+  bot: Detail;
+  isAdmin: boolean;
+  onChanged: (next: Detail) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const save = useMutationWithToast(
+    (description: string) => serviceAccountsApi.update(bot.id, { description }),
+    {
+      successMessage: 'Description saved',
+      errorMessage: null,
+      onSuccess: (next) => {
+        setDraft(null);
+        onChanged(next);
+      },
+    },
+  );
+
+  return (
+    <Section
+      title="Description"
+      action={
+        isAdmin &&
+        draft === null && (
+          <Button variant="ghost" size="xs" onClick={() => setDraft(bot.description)}>
+            <Pencil className="h-3.5 w-3.5" /> Edit description
+          </Button>
+        )
+      }
+    >
+      {draft === null ? (
+        <p className="whitespace-pre-wrap text-sm text-text-secondary">
+          {bot.description || 'No description.'}
+        </p>
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate(draft);
+          }}
+        >
+          <Textarea
+            id="service-account-description-edit"
+            label="Description"
+            value={draft}
+            maxLength={500}
+            rows={3}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          {save.error && (
+            <ErrorAlert error={new Error(serviceAccountError(save.error))} fallback="" />
+          )}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setDraft(null)}>
+              <X className="h-3.5 w-3.5" /> Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={save.isPending}>
+              <Check className="h-3.5 w-3.5" /> Save description
+            </Button>
+          </div>
+        </form>
+      )}
+    </Section>
+  );
+}
+
+function OwnersCard({
+  bot,
+  isAdmin,
+  draft,
+  onDraftChange: setDraft,
+  onChanged,
+}: {
+  bot: Detail;
+  isAdmin: boolean;
+  draft: string[] | null;
+  onDraftChange: (draft: string[] | null) => void;
+  onChanged: (next: Detail) => void;
+}) {
+  const save = useMutationWithToast(
+    (ownerIds: string[]) => serviceAccountsApi.setOwners(bot.id, ownerIds),
+    {
+      successMessage: 'Owners saved',
+      errorMessage: null,
+      onSuccess: (next) => {
+        setDraft(null);
+        onChanged(next);
+      },
+    },
+  );
+
+  return (
+    <Section
+      title="Owners"
+      action={
+        isAdmin &&
+        draft === null && (
+          <Button variant="ghost" size="xs" onClick={() => setDraft(bot.owners.map((o) => o.id))}>
+            <Users className="h-3.5 w-3.5" /> Edit owners
+          </Button>
+        )
+      }
+    >
+      <div data-testid="owners">
+        {bot.owners.length === 0 ? (
+          <p className="text-sm text-danger">No owner. The bot stays suspended until it has one.</p>
+        ) : (
+          <ul className="space-y-1">
+            {bot.owners.map((o) => (
+              <li key={o.id} className="text-sm text-text">
+                <span>{o.displayName}</span>{' '}
+                <span className="text-xs text-text-tertiary">@{o.username}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {draft !== null && (
+        <form
+          className="mt-4 space-y-3 border-t border-border-light pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate(draft);
+          }}
+        >
+          <ServiceAccountOwnerPicker orgId={bot.orgId} selected={draft} onChange={setDraft} />
+          {save.error && (
+            <ErrorAlert error={new Error(serviceAccountError(save.error))} fallback="" />
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                save.reset();
+                setDraft(null);
+              }}
+            >
+              <X className="h-3.5 w-3.5" /> Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={draft.length === 0 || save.isPending}>
+              <Check className="h-3.5 w-3.5" /> Save owners
+            </Button>
+          </div>
+        </form>
+      )}
+    </Section>
+  );
+}
+
+function MembershipsCard({ bot, orgSlug }: { bot: Detail; orgSlug: string }) {
+  return (
+    <Section title="Where it is">
+      <p className="mb-3 text-xs text-text-tertiary">
+        Change its teams on each team&apos;s members page.
+      </p>
+      {bot.teams.length === 0 && bot.spaces.length === 0 ? (
+        <p className="text-sm text-text-tertiary">In no team or space yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {bot.teams.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-2 text-sm">
+              <Link to={`/${orgSlug}/${t.slug}/members`} className="text-primary hover:underline">
+                {t.name}
+              </Link>
+              <Badge variant="outline" size="sm">
+                Team {t.role.toLowerCase()}
+              </Badge>
+            </li>
+          ))}
+          {bot.spaces.map((s) => (
+            <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className="text-text">{s.name}</span>
+              <Badge variant="outline" size="sm">
+                Space {s.level.toLowerCase()}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function TokensCard({ bot }: { bot: Detail }) {
+  const suspended = bot.status === 'SUSPENDED';
+  return (
+    <Section
+      title="Tokens"
+      action={
+        <Button
+          size="xs"
+          disabled={suspended}
+          title={suspended ? 'A suspended bot gets no new tokens' : undefined}
+        >
+          <KeyRound className="h-3.5 w-3.5" /> New token
+        </Button>
+      }
+    >
+      {bot.tokens.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No tokens yet.</p>
+      ) : (
+        <ul className="divide-y divide-border-light">
+          {bot.tokens.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+              <span>
+                <span className="font-medium text-text">{t.name}</span>{' '}
+                <code className="text-xs text-text-tertiary">{t.prefix}...</code>
+              </span>
+              <span className="text-xs text-text-tertiary">
+                {t.expiresAt ? `Expires ${formatDate(t.expiresAt)}` : 'No expiry'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function RequestsCard({ botId }: { botId: string }) {
+  const { data } = useQuery({
+    queryKey: ['agent-approvals', 'open'],
+    queryFn: () => agentApprovalsApi.list({ state: 'open' }),
+  });
+  const requests = (data?.data ?? []).filter((r) => r.serviceAccount?.id === botId);
+  return (
+    <Section title="Waiting requests">
+      {requests.length === 0 ? (
+        <p className="text-sm text-text-tertiary">Nothing waits for you from this bot.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {requests.map((r) => (
+            <li key={r.id}>
+              <Link
+                to={`/approvals/agent/${r.id}`}
+                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {r.preview}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function ActivityCard({ botId }: { botId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['service-account-activity', botId],
+    queryFn: () => serviceAccountsApi.activity(botId),
+  });
+  return (
+    <Section title="Recent activity">
+      {isLoading ? (
+        <Skeleton className="h-16 w-full" />
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No activity you can see yet.</p>
+      ) : (
+        <ul className="divide-y divide-border-light">
+          {data.map((a) => {
+            const label = [a.resourceKey, a.resourceTitle].filter(Boolean).join(' ');
+            return (
+              <li key={a.id} className="flex items-start justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0">
+                  <span className="text-text-secondary">
+                    {ACTION_LABELS[a.action] ?? a.action.replace(/_/g, ' ')}
+                  </span>{' '}
+                  {a.resourceLink ? (
+                    <Link to={a.resourceLink} className="text-primary hover:underline">
+                      {label || a.resourceType.replace(/_/g, ' ')}
+                    </Link>
+                  ) : (
+                    <span className="text-text-tertiary">
+                      {label || `a ${a.resourceType.replace(/_/g, ' ')} that is gone`}
+                    </span>
+                  )}{' '}
+                  <ViaLabel via={a.via} />
+                </span>
+                <span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
+                  <Clock className="h-3 w-3" aria-hidden="true" />
+                  {formatRelative(a.createdAt)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Section>
+  );
+}

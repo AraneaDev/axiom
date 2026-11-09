@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ShieldCheck,
   Bot,
+  Settings,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NavLink, useParams } from 'react-router';
@@ -200,6 +201,7 @@ export function Sidebar() {
           {currentOrg && (
             <div className="space-y-1">
               <NavItem to={`/${org}/approvals`} icon={ShieldCheck} label="My Approvals" />
+              <NavItem to={`/${org}/settings`} icon={Settings} label="Org settings" />
               <NavItem
                 to="/approvals/agent"
                 icon={Bot}

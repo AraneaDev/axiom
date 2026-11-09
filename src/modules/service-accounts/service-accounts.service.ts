@@ -7,7 +7,10 @@ import { AppError } from '../../middleware/errorHandler';
 import { isMintableScope } from '../../middleware/token-scopes';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
+import { viewablePageIdFilter, viewableProjectIds } from '../search/search-access';
+import { withResourceLinks } from '../teams/teams.service';
 import { generateApiToken } from '../users/users.service';
 
 import { assertPlacesKept, lockEligibleOwners, lockServiceAccount } from './bot-guards';
@@ -266,7 +269,69 @@ export async function listServiceAccounts(orgId: string, viewerId: string) {
     orderBy: { createdAt: 'asc' },
   });
   if (!admin && rows.length === 0) await assertOrgAdmin(viewerId, orgId);
-  return rows.map(summarize);
+  const ids = rows.map((r) => r.userId);
+  const [teams, lastUses] = await Promise.all([
+    prisma.teamMembership.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true, role: true, team: { select: { id: true, name: true, slug: true } } },
+      orderBy: { createdAt: 'asc' },
+    }),
+    // When each bot last called the API, by any of its tokens: says it runs, not where
+    prisma.apiToken.groupBy({
+      by: ['userId'],
+      where: { userId: { in: ids } },
+      _max: { lastUsedAt: true },
+    }),
+  ]);
+  const lastUsed = new Map(lastUses.map((t) => [t.userId, t._max.lastUsedAt]));
+  return rows.map((row) => ({
+    ...summarize(row),
+    teams: teams.filter((t) => t.userId === row.userId).map((t) => ({ ...t.team, role: t.role })),
+    lastUsedAt: lastUsed.get(row.userId) ?? null,
+  }));
+}
+
+/** How many of a bot's latest activities its page shows */
+const ACTIVITY_LIMIT = 30;
+
+/**
+ * A bot's latest activity on issues and pages, newest first, with each one's title and link:
+ * only what the viewer can open, as team activity filters. A bot's owners can open each of its
+ * places (decision 9); this is the backstop for one they no longer can.
+ * @param id - The bot's user id
+ * @param viewerId - Who reads
+ */
+export async function serviceAccountActivity(id: string, viewerId: string) {
+  const [projectIds, { spaceIds, hiddenPageIds }] = await Promise.all([
+    viewableProjectIds(viewerId),
+    viewablePageIdFilter(viewerId),
+  ]);
+  const allProjects = projectIds === null;
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT a.id FROM activities a
+    WHERE a."userId" = ${id}
+      AND (
+        (a."resourceType" = 'issue' AND EXISTS (
+          SELECT 1 FROM issues i
+          WHERE i.id = a."resourceId"
+            AND (${allProjects} OR i."projectId" = ANY(${projectIds ?? []}))
+        ))
+        OR (a."resourceType" = 'wiki_page' AND EXISTS (
+          SELECT 1 FROM pages pg
+          WHERE pg.id = a."resourceId"
+            AND pg."spaceId" = ANY(${spaceIds})
+            AND NOT (pg.id = ANY(${hiddenPageIds}))
+        ))
+      )
+    ORDER BY a."createdAt" DESC
+    LIMIT ${ACTIVITY_LIMIT}
+  `;
+  const activities = await prisma.activity.findMany({
+    where: { id: { in: rows.map((r) => r.id) } },
+    include: { user: { select: USER_WITH_AVATAR_SELECT } },
+    orderBy: { createdAt: 'desc' },
+  });
+  return withResourceLinks(activities);
 }
 
 /**

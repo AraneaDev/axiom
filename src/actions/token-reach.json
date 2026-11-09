@@ -267,6 +267,7 @@
   "search.results": ["search:read", "search:write"],
   "search.run": ["search:read", "search:write"],
   "searchSpace.list": ["search:read", "search:write"],
+  "serviceAccount.activity": ["issues:read", "issues:write"],
   "serviceAccount.create": [],
   "serviceAccount.createToken": [],
   "serviceAccount.delete": [],

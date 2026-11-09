@@ -684,7 +684,7 @@ Delete an organization. Requires `org:manage` permission.
 
 ### GET /api/orgs/:orgId/members
 
-List organization members.
+List organization members: people only, as pickers read it. With `includeBots=true` the org's service accounts come too. Each `user` has its `kind` (`PERSON` or `SERVICE`).
 
 **Response 200:**
 
@@ -825,15 +825,16 @@ Accept an invitation using a token from an invitation email.
 
 Base path: `/api`
 
-A service account is a bot of one org: a user of kind `SERVICE` with no password, its own tokens and one or more owners. The [MCP server guide](axiom-mcp-server.md#service-accounts) explains owners, places, approvals and suspension. All actions are in the `orgs` area. Creating, editing, deleting, setting owners and every token action are web UI only (`uiOnly`). Suspend and resume are admin actions: a token's call waits for approval.
+A service account is a bot of one org: a user of kind `SERVICE` with no password, its own tokens and one or more owners. The [MCP server guide](axiom-mcp-server.md#service-accounts) explains owners, places, approvals and suspension. All actions are in the `orgs` area, except `serviceAccount.activity` (`issues`, as team activity) and suspend and resume (`admin`). Creating, editing, deleting, setting owners and every token action are web UI only (`uiOnly`). Suspend and resume are admin actions: a token's call waits for approval.
 
 Who may call them: an org owner or admin (a platform admin too) for everything; an owner of the bot for reading it, its tokens, suspend and resume. An owner who tries an org admin's change gets `403`. Anyone else gets `404`, as if the bot did not exist.
 
 | Method and path | Action | Notes |
 | --- | --- | --- |
 | `POST /api/orgs/:orgId/service-accounts` | `serviceAccount.create` | Web UI only. `username`, `displayName`, `description` (500 characters at most), `ownerIds` (1 to 50). `201` |
-| `GET /api/orgs/:orgId/service-accounts` | `serviceAccount.list` | All of the org's bots for an org admin, the ones you own otherwise |
+| `GET /api/orgs/:orgId/service-accounts` | `serviceAccount.list` | All of the org's bots for an org admin, the ones you own otherwise. Each with its owners, its `teams` and `lastUsedAt`, when one of its tokens last called the API |
 | `GET /api/service-accounts/:id` | `serviceAccount.get` | Status, owners, teams, spaces and tokens (never their hashes) |
+| `GET /api/service-accounts/:id/activity` | `serviceAccount.activity` | Its latest 30 activities on issues and pages, newest first, with each one's `resourceTitle`, `resourceKey` and `resourceLink`; only what you can open yourself |
 | `PATCH /api/service-accounts/:id` | `serviceAccount.update` | Web UI only. `displayName`, `description` |
 | `PUT /api/service-accounts/:id/owners` | `serviceAccount.setOwners` | Web UI only. `ownerIds` replaces the owners; resumes an orphaned bot |
 | `DELETE /api/service-accounts/:id` | `serviceAccount.delete` | Web UI only. Tokens, memberships and owners go, waiting requests are cancelled; the deactivated user stays as the author of its history. `204` |
@@ -953,7 +954,7 @@ Get a team member's profile including recent activity and contributions.
 
 ### GET /api/teams/:teamId/members
 
-List team members.
+List team members: people only, as pickers read it. With `includeBots=true` the team's service accounts come too, as the members page shows them. Each `user` has its `kind` (`PERSON` or `SERVICE`).
 
 **Response 200:** Array of member objects.
 

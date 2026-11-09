@@ -32,8 +32,18 @@ vi.mock('@/api/admin.api', () => ({
           displayName: 'GitHub',
           kind: 'INTEGRATION',
         }),
+        user({
+          id: 'bot-1',
+          email: 'bot-1@service-accounts.invalid',
+          username: 'nightly-triage',
+          displayName: 'Nightly Triage',
+          kind: 'SERVICE',
+          orgMemberships: [
+            { role: 'MEMBER', org: { id: 'org-1', name: 'Acme Labs', slug: 'acme-labs' } },
+          ],
+        }),
       ],
-      total: 2,
+      total: 3,
     }),
   },
 }));
@@ -64,5 +74,27 @@ describe('UserManagement', () => {
     expect(builtIn.queryByTitle('Delete user')).toBeNull();
     expect(builtIn.queryByTitle('Reset password')).toBeNull();
     expect(builtIn.queryByTitle('Deactivate user')).toBeNull();
+  });
+
+  it('offers no deactivate or password reset for a bot, and links to its page instead', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <ToastProvider>
+            <UserManagement />
+          </ToastProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Nightly Triage');
+    const bot = within(rowOf('Nightly Triage'));
+    expect(bot.getByText('bot')).toBeTruthy();
+    expect(bot.queryByTitle('Deactivate user')).toBeNull();
+    expect(bot.queryByTitle('Reactivate user')).toBeNull();
+    expect(bot.queryByTitle('Reset password')).toBeNull();
+    expect(bot.getByTitle('Open the service account')).toHaveAttribute(
+      'href',
+      '/acme-labs/settings/service-accounts/bot-1',
+    );
   });
 });

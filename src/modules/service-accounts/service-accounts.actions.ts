@@ -70,6 +70,19 @@ registerActions([
     handler: async (_ctx, { id }) => service.describeServiceAccount(id),
   }),
   defineAction({
+    name: 'serviceAccount.activity',
+    // Issue and page titles, read as team activity is
+    area: 'issues',
+    kind: 'read',
+    summary: "Read a service account's latest activity on issues and pages: only what you can open",
+    target: botTarget,
+    input: botTarget,
+    output: z.array(z.looseObject({ id: z.string() })),
+    rest: { method: 'GET', path: '/api/service-accounts/:id/activity' },
+    authorize: async (ctx, { id }) => service.assertCanAccess(ctx.userId, id, 'read'),
+    handler: async (ctx, { id }) => service.serviceAccountActivity(id, ctx.userId),
+  }),
+  defineAction({
     name: 'serviceAccount.update',
     uiOnly: true,
     area: 'orgs',

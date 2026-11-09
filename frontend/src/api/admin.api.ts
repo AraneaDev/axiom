@@ -1,3 +1,5 @@
+import type { UserKind } from '@/lib/types';
+
 import { get, patch, post, del } from './client';
 
 export interface SystemStats {
@@ -19,8 +21,11 @@ export interface AdminUser {
   displayName: string;
   avatarUrl?: string;
   isAdmin?: boolean;
-  /** INTEGRATION is a built-in user such as GitHub: shown, never changed */
-  kind?: 'PERSON' | 'INTEGRATION';
+  /**
+   * INTEGRATION is a built-in user such as GitHub: shown, never changed. SERVICE is a bot,
+   * suspended on its own page rather than deactivated
+   */
+  kind?: UserKind;
   twoFactorEnabled: boolean;
   createdAt: string;
   deactivatedAt?: string | null;

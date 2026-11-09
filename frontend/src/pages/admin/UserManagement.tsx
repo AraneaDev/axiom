@@ -13,6 +13,7 @@ import {
   KeyRound,
   ShieldOff,
   AlertTriangle,
+  Bot,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -30,6 +31,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
+import { UserName } from '@/components/ui/UserName';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
@@ -297,7 +299,9 @@ export default function UserManagement() {
                       <Avatar name={user.displayName} src={user.avatarUrl} size="sm" />
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-text">{user.displayName}</p>
+                          <p className="font-medium text-text">
+                            <UserName user={user} />
+                          </p>
                           {user.kind === 'INTEGRATION' && (
                             <Badge variant="outline" size="sm">
                               Built in
@@ -337,7 +341,18 @@ export default function UserManagement() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {!user.isAdmin && user.kind !== 'INTEGRATION' && (
+                      {/* A bot is never deactivated: it is suspended on its own page */}
+                      {user.kind === 'SERVICE' && user.orgMemberships[0] && (
+                        <ButtonLink
+                          to={`/${user.orgMemberships[0].org.slug}/settings/service-accounts/${user.id}`}
+                          variant="ghost"
+                          size="sm"
+                          title="Open the service account"
+                        >
+                          <Bot className="h-4 w-4" />
+                        </ButtonLink>
+                      )}
+                      {!user.isAdmin && user.kind !== 'INTEGRATION' && user.kind !== 'SERVICE' && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -362,7 +377,7 @@ export default function UserManagement() {
                           )}
                         </Button>
                       )}
-                      {user.kind !== 'INTEGRATION' && (
+                      {user.kind !== 'INTEGRATION' && user.kind !== 'SERVICE' && (
                         <Button
                           variant="ghost"
                           size="sm"

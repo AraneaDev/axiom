@@ -20,6 +20,10 @@ export interface AgentApprovalSummary {
   decidedAt: string | null;
   expiresAt: string;
   createdAt: string;
+  /** The bot that asked, on a request of a service account the reader owns */
+  serviceAccount?: { id: string; displayName: string };
+  /** A bot's request in a place the reader can't open: no preview of its own, and no decision */
+  restricted?: true;
 }
 
 export interface AgentApprovalError {

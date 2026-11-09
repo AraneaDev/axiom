@@ -2,6 +2,7 @@
 import { lazy } from 'react';
 import { Route, Navigate } from 'react-router';
 
+import { OrgSettingsLayout } from '@/components/layout/OrgSettingsLayout';
 import { SettingsLayout } from '@/components/layout/SettingsLayout';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
@@ -14,6 +15,8 @@ const AgentApprovals = lazy(() => import('@/pages/approvals/AgentApprovals'));
 const AgentApprovalDetail = lazy(() => import('@/pages/approvals/AgentApprovalDetail'));
 const AgentApprovalRules = lazy(() => import('@/pages/settings/AgentApprovalRules'));
 const OrgAgentApprovals = lazy(() => import('@/pages/orgs/OrgAgentApprovals'));
+const ServiceAccounts = lazy(() => import('@/pages/orgs/ServiceAccounts'));
+const ServiceAccountDetail = lazy(() => import('@/pages/orgs/ServiceAccountDetail'));
 const SearchResults = lazy(() => import('@/pages/search/SearchResults'));
 const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
 const UserManagement = lazy(() => import('@/pages/admin/UserManagement'));
@@ -68,15 +71,20 @@ export function adminRoutes() {
         }
       />
 
-      {/* The base rules of an org; only its owners change them */}
+      {/* An org's settings: its bots, and the base rules only its owners change */}
       <Route
-        path="/:org/settings/agent-approvals"
+        path="/:org/settings"
         element={
           <ErrorBoundary>
-            <OrgAgentApprovals />
+            <OrgSettingsLayout />
           </ErrorBoundary>
         }
-      />
+      >
+        <Route index element={<Navigate to="service-accounts" replace />} />
+        <Route path="service-accounts" element={<ServiceAccounts />} />
+        <Route path="service-accounts/:id" element={<ServiceAccountDetail />} />
+        <Route path="agent-approvals" element={<OrgAgentApprovals />} />
+      </Route>
 
       {/* Settings */}
       <Route

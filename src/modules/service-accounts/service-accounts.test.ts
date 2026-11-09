@@ -309,3 +309,138 @@ describe('service accounts: create, list, owners, delete', () => {
     expect(results.map((r) => r.status).sort()).toEqual([204, 404]);
   });
 });
+
+describe('service accounts: the list and the activity of a bot', () => {
+  let ctx: TestContext;
+  let owner: TestUser;
+  let stranger: TestUser;
+  let botId: string;
+  let seenIssueId: string;
+  let hiddenIssueId: string;
+
+  beforeAll(async () => {
+    ctx = await createTestContext('svcactivity');
+    owner = await createTestUser({ username: 'voorbeeld-owner-svcactivity' });
+    stranger = await createTestUser({ username: 'voorbeeld-stranger-svcactivity' });
+    for (const user of [owner, stranger]) {
+      await prisma.orgMembership.create({
+        data: { orgId: ctx.orgId, userId: user.id, role: 'MEMBER' },
+      });
+    }
+    await prisma.teamMembership.create({
+      data: { teamId: ctx.teamId, userId: owner.id, role: 'MEMBER' },
+    });
+    const bot = await prisma.user.create({
+      data: {
+        email: 'activity-bot@service.invalid',
+        username: 'acme-activity-bot',
+        displayName: 'Activity bot',
+        passwordHash: '!',
+        kind: 'SERVICE',
+        orgMemberships: { create: { orgId: ctx.orgId, role: 'MEMBER' } },
+        teamMemberships: { create: { teamId: ctx.teamId, role: 'MEMBER' } },
+        serviceAccount: {
+          create: {
+            orgId: ctx.orgId,
+            createdById: ctx.owner.id,
+            owners: { create: { ownerId: owner.id } },
+          },
+        },
+      },
+    });
+    botId = bot.id;
+    seenIssueId = (
+      await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: 1,
+          title: 'Stale ticket',
+          body: '',
+          creatorId: botId,
+        },
+      })
+    ).id;
+    // A team none of the bot's owners is in: what the bot did there is not shown to them. Decision
+    // 9 keeps a bot out of such a place; the filter is the backstop
+    const hiddenTeam = await prisma.team.create({
+      data: {
+        orgId: ctx.orgId,
+        name: 'Hidden team',
+        slug: 'hidden-svcactivity',
+        projects: { create: { name: 'Hidden', slug: 'hidden', prefix: 'HID' } },
+      },
+      include: { projects: true },
+    });
+    hiddenIssueId = (
+      await prisma.issue.create({
+        data: {
+          projectId: hiddenTeam.projects[0].id,
+          number: 1,
+          title: 'Secret ticket',
+          body: '',
+          creatorId: botId,
+        },
+      })
+    ).id;
+    await prisma.activity.createMany({
+      data: [
+        { resourceType: 'issue', resourceId: seenIssueId, action: 'created', userId: botId },
+        { resourceType: 'issue', resourceId: hiddenIssueId, action: 'created', userId: botId },
+      ],
+    });
+    await prisma.apiToken.create({
+      data: {
+        userId: botId,
+        name: 'nightly',
+        tokenHash: 'svcactivity-test-hash',
+        prefix: 'tk_11111111',
+        scopes: ['issues:read'],
+        expiresAt: new Date(Date.now() + 86_400_000),
+        lastUsedAt: new Date('2026-11-01T10:00:00Z'),
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await cleanupTestContext(ctx);
+    await prisma.user.deleteMany({ where: { id: { in: [owner.id, stranger.id, botId] } } });
+  });
+
+  it('the list names the teams of each bot and when it was last active', async () => {
+    const res = await authGet(`/api/orgs/${ctx.orgId}/service-accounts`, ctx.owner.token);
+    expect(res.status).toBe(200);
+    const row = res.body.find((b: { id: string }) => b.id === botId);
+    expect(row.teams).toEqual([
+      expect.objectContaining({ id: ctx.teamId, slug: ctx.teamSlug, role: 'MEMBER' }),
+    ]);
+    expect(row.lastUsedAt).toBe('2026-11-01T10:00:00.000Z');
+  });
+
+  it("an owner reads the bot's activity, only where they can open it", async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/activity`, owner.token);
+    expect(res.status).toBe(200);
+    const ids = (res.body as Array<{ resourceId: string }>).map((a) => a.resourceId);
+    expect(ids).toContain(seenIssueId);
+    expect(ids).not.toContain(hiddenIssueId);
+    const seen = res.body.find((a: { resourceId: string }) => a.resourceId === seenIssueId);
+    expect(seen).toMatchObject({
+      resourceTitle: 'Stale ticket',
+      resourceKey: `${ctx.projectPrefix}-1`,
+      user: { id: botId, kind: 'SERVICE' },
+    });
+  });
+
+  it('an org admin reads it too', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/activity`, ctx.owner.token);
+    expect(res.status).toBe(200);
+    expect((res.body as Array<{ resourceId: string }>).map((a) => a.resourceId)).toContain(
+      seenIssueId,
+    );
+  });
+
+  it('a stranger is told the bot does not exist', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/activity`, stranger.token);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('SERVICE_ACCOUNT_NOT_FOUND');
+  });
+});

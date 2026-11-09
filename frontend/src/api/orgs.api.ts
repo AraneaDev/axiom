@@ -1,4 +1,4 @@
-import type { Organization } from '@/lib/types';
+import type { Organization, UserKind } from '@/lib/types';
 
 import { get, post, patch, del } from './client';
 
@@ -35,6 +35,11 @@ export const orgsApi = {
    */
   delete: (orgId: string) => del(`/orgs/${orgId}`),
   /**
+   * The people of an organization with their roles. Bots stay out: this feeds pickers.
+   * @param orgId
+   */
+  listMembers: (orgId: string) => get<OrgMember[]>(`/orgs/${orgId}/members`),
+  /**
    * Add a user to an organization with a specific role.
    * @param orgId
    * @param userId
@@ -68,6 +73,13 @@ export const orgsApi = {
       team: { id: string; name: string; slug: string } | null;
     }>(`/invitations/${token}/accept`, {}),
 };
+
+/** A member of an org, as the member list gives it */
+export interface OrgMember {
+  userId: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST';
+  user: { id: string; username: string; displayName: string; kind?: UserKind };
+}
 
 export interface Invitation {
   id: string;

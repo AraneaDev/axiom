@@ -423,11 +423,22 @@ export async function getTeamActivity(teamId: string, viewerId: string, rawLimit
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
+  return withResourceLinks(activities);
+}
 
+/**
+ * Add each activity's resource title, key and link: the issue or wiki page it is about. One the
+ * resource of which is gone keeps nulls.
+ * @param activities - Activity rows, as read with their user
+ * @returns The rows with resourceTitle, resourceLink and resourceKey
+ */
+export async function withResourceLinks<A extends { resourceType: string; resourceId: string }>(
+  activities: A[],
+) {
   // Hydrate with resource titles and links
   const teamOrgSelect = { slug: true, org: { select: { slug: true } } } as const;
 
-  type Activity = (typeof activities)[number];
+  type Activity = A;
   const issueIds = activities
     .filter((a: Activity) => a.resourceType === 'issue')
     .map((a: Activity) => a.resourceId);
