@@ -388,3 +388,22 @@ export const savedQueryPlace: PlaceResolver = async (_ctx, input) => {
   if (!row) return {};
   return sharedPlace(row, given);
 };
+
+/**
+ * A dashboard widget: the dashboard, and the saved query the widget names, as stored. The query
+ * runs with the bot's rights when the dashboard renders, so who decides must be able to open it
+ * too. A query or a dashboard that names nothing leaves a request nobody decides.
+ * @param ctx - Who runs it
+ * @param input - Its validated input, with id and savedQueryId
+ */
+export const dashboardWidgetPlace: PlaceResolver = async (ctx, input) => {
+  const dashboard = await dashboardPlace(ctx, input);
+  const [savedQueryId] = idsOf(fieldsOf(input), 'savedQueryId');
+  if (!savedQueryId || (isEmptyPlace(dashboard) && !dashboard.orgLevel)) return dashboard;
+  const row = await prisma.savedFilter.findUnique({
+    where: { id: savedQueryId },
+    select: { visibility: true, teamId: true, projectId: true },
+  });
+  if (!row) return {};
+  return joined(dashboard, await sharedPlace(row, {}));
+};

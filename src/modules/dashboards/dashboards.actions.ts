@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
 import { orgsOfDashboard } from '../../actions/org-lookups';
-import { dashboardPlace, inputOrOrgPlace } from '../../actions/places';
+import { dashboardPlace, dashboardWidgetPlace, inputOrOrgPlace } from '../../actions/places';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { dashboardUpdate } from '../../actions/sharing-previews';
@@ -273,7 +273,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.add',
-    place: dashboardPlace,
+    place: dashboardWidgetPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
@@ -298,7 +298,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.update',
-    place: dashboardPlace,
+    place: dashboardWidgetPlace,
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
