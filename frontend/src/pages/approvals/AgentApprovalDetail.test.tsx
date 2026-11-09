@@ -107,6 +107,31 @@ describe('AgentApprovalDetail', () => {
     expect(screen.queryByRole('button', { name: /show input/i })).toBeNull();
   });
 
+  it.each([
+    ['REJECTED', /This request was rejected/, /You rejected/],
+    ['EXECUTED', /This request ran/, /returned nothing/],
+    ['FAILED', /This request failed/, /failed without a message/],
+  ])(
+    'a decided stub (%s) states the outcome neutrally and shows no result or error',
+    async (status, shown, hidden) => {
+      get.mockResolvedValue(
+        request({
+          userId: 'bot-1',
+          status,
+          restricted: true,
+          input: undefined,
+          result: undefined,
+          error: undefined,
+          serviceAccount: { id: 'bot-1', displayName: 'Triage bot' },
+        }),
+      );
+      show();
+      expect(await screen.findByText(shown)).toBeInTheDocument();
+      expect(screen.queryByText(hidden)).toBeNull();
+      expect(screen.queryByText('Result')).toBeNull();
+    },
+  );
+
   it('approves, then shows the result', async () => {
     get.mockResolvedValue(request());
     approve.mockResolvedValue(request({ status: 'EXECUTED', result: { deleted: true } }));

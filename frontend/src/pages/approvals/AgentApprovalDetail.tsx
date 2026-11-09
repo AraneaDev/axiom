@@ -248,7 +248,18 @@ function AgentApprovalDetailFor({ id }: { id: string }) {
               This request expired before you decided. The agent has to ask again.
             </p>
           )}
-          {status === 'REJECTED' && (
+          {row.restricted && status !== 'PENDING' && status !== 'EXPIRED' && (
+            <p className="mb-4 text-sm text-text-secondary">
+              {status === 'REJECTED'
+                ? 'This request was rejected. The action never ran.'
+                : status === 'EXECUTED'
+                  ? 'This request ran. Its result is in a place you cannot open.'
+                  : status === 'FAILED'
+                    ? 'This request failed. Its details are in a place you cannot open.'
+                    : 'This request was cancelled.'}
+            </p>
+          )}
+          {!row.restricted && status === 'REJECTED' && (
             <p className="mb-4 text-sm text-text-secondary">
               You rejected this request. The action never ran.
             </p>
@@ -264,7 +275,7 @@ function AgentApprovalDetailFor({ id }: { id: string }) {
             </div>
           )}
 
-          {status === 'EXECUTED' && (
+          {!row.restricted && status === 'EXECUTED' && (
             <Card className="p-5 mb-4">
               <h2 className="mb-2 text-sm font-semibold text-text">Result</h2>
               {row.result == null ? (
@@ -279,7 +290,7 @@ function AgentApprovalDetailFor({ id }: { id: string }) {
             </Card>
           )}
 
-          {status === 'FAILED' && (
+          {!row.restricted && status === 'FAILED' && (
             <Card className="p-5 mb-4 border-danger/30">
               <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-danger">
                 <AlertTriangle className="h-4 w-4" /> The action failed
