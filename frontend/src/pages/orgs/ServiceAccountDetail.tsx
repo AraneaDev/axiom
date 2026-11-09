@@ -6,7 +6,6 @@ import {
   Bot,
   Check,
   Clock,
-  KeyRound,
   PauseCircle,
   Pencil,
   PlayCircle,
@@ -52,6 +51,7 @@ import {
   useOrgOfPage,
 } from './service-account-shared';
 import { ServiceAccountOwnerPicker } from './ServiceAccountOwnerPicker';
+import { ServiceAccountTokens } from './ServiceAccountTokens';
 
 /** What an activity's action reads as, after the bot's name */
 const ACTION_LABELS: Record<string, string> = {
@@ -211,7 +211,7 @@ export default function ServiceAccountDetail() {
             <ErrorAlert error={new Error(serviceAccountError(actionError))} fallback="" />
           )}
           <DescriptionCard bot={bot} isAdmin={isAdmin} onChanged={onChanged} />
-          <TokensCard bot={bot} />
+          <ServiceAccountTokens bot={bot} />
           <ActivityCard botId={bot.id} />
         </div>
         <div className="flex flex-col gap-6 min-w-0">
@@ -622,42 +622,6 @@ function AddPlaceModal({
         </ModalFooter>
       </form>
     </Modal>
-  );
-}
-
-function TokensCard({ bot }: { bot: Detail }) {
-  const suspended = bot.status === 'SUSPENDED';
-  return (
-    <Section
-      title="Tokens"
-      action={
-        <Button
-          size="xs"
-          disabled={suspended}
-          title={suspended ? 'A suspended bot gets no new tokens' : undefined}
-        >
-          <KeyRound className="h-3.5 w-3.5" /> New token
-        </Button>
-      }
-    >
-      {bot.tokens.length === 0 ? (
-        <p className="text-sm text-text-tertiary">No tokens yet.</p>
-      ) : (
-        <ul className="divide-y divide-border-light">
-          {bot.tokens.map((t) => (
-            <li key={t.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-              <span>
-                <span className="font-medium text-text">{t.name}</span>{' '}
-                <code className="text-xs text-text-tertiary">{t.prefix}...</code>
-              </span>
-              <span className="text-xs text-text-tertiary">
-                {t.expiresAt ? `Expires ${formatDate(t.expiresAt)}` : 'No expiry'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Section>
   );
 }
 

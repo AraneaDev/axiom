@@ -14,12 +14,13 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Toggle } from '@/components/ui/Toggle';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import { AGENT_CLIENTS, agentSnippets, type AgentClient } from '@/lib/agent-snippets';
+import {
+  AGENT_CLIENTS,
+  agentSnippets,
+  CONNECT_SCOPES,
+  type AgentClient,
+} from '@/lib/agent-snippets';
 import { SCOPE_GROUPS, toggleScope } from '@/lib/token-scopes';
-
-const CONNECT_SCOPES: string[] = SCOPE_GROUPS.filter((g) => g.area !== 'admin').flatMap((g) =>
-  'readOnly' in g ? [`${g.area}:read`] : [`${g.area}:write`],
-);
 
 /** Create a token for Claude Code or Codex and show the command or config that uses it. */
 export default function ConnectAgent() {

@@ -49,6 +49,17 @@ export interface ServiceAccountToken {
   createdAt: string;
 }
 
+/** A token as it is made or rotated: the one time its raw value comes back */
+export interface NewServiceAccountToken {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  expiresAt: string | null;
+  createdAt: string;
+  token: string;
+}
+
 /** A team or space the bot may join: one of its owners can open it, and it is not there yet */
 export interface JoinablePlace {
   id: string;
@@ -90,6 +101,15 @@ export const serviceAccountsApi = {
   resume: (id: string) =>
     post<ServiceAccountDetail>(`/service-accounts/${encodeURIComponent(id)}/resume`, {}),
   delete: (id: string) => del(`/service-accounts/${encodeURIComponent(id)}`),
+  createToken: (id: string, data: { name: string; scopes: string[]; expiresInDays: number }) =>
+    post<NewServiceAccountToken>(`/service-accounts/${encodeURIComponent(id)}/tokens`, data),
+  rotateToken: (id: string, tokenId: string) =>
+    post<NewServiceAccountToken>(
+      `/service-accounts/${encodeURIComponent(id)}/tokens/${encodeURIComponent(tokenId)}/rotate`,
+      {},
+    ),
+  revokeToken: (id: string, tokenId: string) =>
+    del(`/service-accounts/${encodeURIComponent(id)}/tokens/${encodeURIComponent(tokenId)}`),
 };
 
 /** What each refusal of a service account action means, in plain words */
@@ -116,6 +136,8 @@ const MESSAGES: Record<string, string> = {
   SERVICE_ACCOUNT_NOT_ASSIGNABLE: 'A bot cannot be assigned an issue.',
   SERVICE_ACCOUNT_NOT_INVITABLE: 'A bot cannot be invited or added to an organization.',
   SERVICE_ACCOUNT_NOT_WATCHER: 'A bot cannot watch an issue.',
+  TOKEN_ALREADY_ROTATED: 'This token was already rotated. Rotate its replacement instead.',
+  TOKEN_NOT_FOUND: 'This token no longer exists. It may have been revoked.',
   USERNAME_TAKEN: 'That username is taken.',
   FORBIDDEN: 'Only an org owner or admin can do this.',
   UI_ONLY: 'This can only be done in the web UI, never with a token.',
