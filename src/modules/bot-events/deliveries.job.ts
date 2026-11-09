@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 import { logger } from '../../utils/logger';
 
-import { deliverDueEvents } from './sender';
+import { deliverDueEvents, stopBotDeliveries } from './sender';
 
 /** Finished deliveries are kept this long */
 const KEEP_DAYS = 30;
@@ -61,11 +61,13 @@ export function startBotDeliveryTick(
 }
 
 /**
- * Wait for the tick in flight, at most SHUTDOWN_WAIT_MS. An event cut off mid-send stays leased
+ * Stop the sender starting new sends, then wait for the tick in flight, at most
+ * SHUTDOWN_WAIT_MS. An event cut off mid-send stays leased
  * and is sent again after the lease, which its Axiom-Event-Id lets the bot recognise.
  * @returns Whether no tick is still running
  */
 export async function waitForBotDeliveryTick(): Promise<boolean> {
+  stopBotDeliveries();
   const tick = inFlight;
   if (!tick) return true;
   let timer: ReturnType<typeof setTimeout> | undefined;

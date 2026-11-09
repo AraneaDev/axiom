@@ -282,6 +282,17 @@ async function claim(head: BotEvent, now: Date): Promise<boolean> {
   return count === 1;
 }
 
+let stopping = false;
+
+/**
+ * Tell the sender the worker is stopping: a send in flight finishes and is recorded, and no
+ * other starts. Tests switch it back off.
+ * @param stop - Whether the worker is stopping
+ */
+export function stopBotDeliveries(stop = true): void {
+  stopping = stop;
+}
+
 /**
  * Send a bot's due events in seq order, until one fails, none is due, or the tick runs out.
  * @param botId - The bot's user id
@@ -296,7 +307,7 @@ async function drainBot(
   deadline: number,
 ): Promise<void> {
   const clock = deps.now ?? (() => new Date());
-  for (let i = 0; i < MAX_EVENTS_PER_BOT && Date.now() < deadline; i++) {
+  for (let i = 0; i < MAX_EVENTS_PER_BOT && Date.now() < deadline && !stopping; i++) {
     const now = clock();
     const head = await prisma.botEvent.findFirst({
       where: { botId, status: 'PENDING' },
@@ -313,7 +324,7 @@ async function drainBot(
       tally.dropped += dropped.count;
       continue;
     }
-    if (!(await claim(head, now))) return;
+    if (stopping || !(await claim(head, now))) return;
     const result = await sendOne(head, webhook, deps);
     await record(head, result, now);
     if (!result.ok) {
@@ -369,7 +380,7 @@ export async function deliverDueEvents(
   const waiting = due.map((d) => d.botId);
   const lane = async () => {
     for (let botId = waiting.shift(); botId; botId = waiting.shift()) {
-      if (Date.now() >= deadline) return;
+      if (Date.now() >= deadline || stopping) return;
       try {
         await drainBot(botId, sendDeps, tally, deadline);
       } catch (err) {

@@ -35,6 +35,7 @@ import {
   deliverDueEvents,
   openDirect,
   sendTestEvent,
+  stopBotDeliveries,
 } from './sender';
 import { verifySignature } from './sign';
 import { readBotWebhookSecret, resumeBotWebhook, setBotWebhook } from './webhook-config.service';
@@ -150,6 +151,7 @@ describe('bot event sender', () => {
   });
 
   beforeEach(async () => {
+    stopBotDeliveries(false);
     clock = new Date('2026-11-09T12:00:00.000Z');
     calls = [];
     answer = async () => response(200);
@@ -524,6 +526,36 @@ describe('bot event sender', () => {
   });
 
   describe('worker shutdown', () => {
+    it('a stopping worker finishes the send in flight and starts no other', async () => {
+      const ids = await queue(botA, 3);
+      let release!: () => void;
+      let arrived!: () => void;
+      const firstCall = new Promise<void>((resolve) => {
+        arrived = resolve;
+      });
+      answer = () =>
+        new Promise<IncomingMessage>((resolve) => {
+          arrived();
+          release = () => resolve(response(200));
+        });
+      try {
+        const tick = run();
+        await firstCall;
+        stopBotDeliveries();
+        release();
+        await tick;
+        expect(calls).toHaveLength(1);
+        expect((await event(ids[0])).status).toBe('DELIVERED');
+        for (const id of ids.slice(1)) {
+          const later = await event(id);
+          expect(later.status).toBe('PENDING');
+          expect(later.attempts).toBe(0);
+        }
+      } finally {
+        stopBotDeliveries(false);
+      }
+    });
+
     it('waits for the tick in flight, and a second tick does not start meanwhile', async () => {
       let finish!: () => void;
       let done = false;
