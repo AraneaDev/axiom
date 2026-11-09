@@ -219,18 +219,23 @@ async function issueInProject(projectId: string, issueId: string) {
  * @throws {AppError} 404 for an issue or a bucket that isn't in this project
  */
 export async function setIssueBucket(projectId: string, issueId: string, bucketId: string | null) {
-  await issueInProject(projectId, issueId);
+  const issue = await issueInProject(projectId, issueId);
   if (bucketId !== null) {
     await findOrThrow(
       prisma.roadmapBucket.findFirst({ where: { id: bucketId, projectId } }),
       'Roadmap bucket not found',
     );
   }
-  return prisma.issue.update({
+  const updated = await prisma.issue.update({
     where: { id: issueId },
     data: { roadmapBucketId: bucketId },
     select: ISSUE_ROADMAP_SELECT,
   });
+  // A bucket's name is the project's own text: the event names the field only
+  if (issue.roadmapBucketId !== bucketId) {
+    await emitIssueEvents({ issueId, changedFields: ['roadmapBucket'] });
+  }
+  return updated;
 }
 
 /**

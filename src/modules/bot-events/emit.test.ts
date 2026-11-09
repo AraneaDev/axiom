@@ -23,7 +23,7 @@ import { addComment } from '../issues/issue-comments.service';
 import { setParent } from '../issues/issue-hierarchy.service';
 import { logWork } from '../issues/issue-time.service';
 import { createIssue, updateIssue } from '../issues/issues.service';
-import { setIssueDates } from '../roadmap/roadmap.service';
+import { setIssueBucket, setIssueDates } from '../roadmap/roadmap.service';
 import {
   createServiceAccount,
   suspendServiceAccount,
@@ -400,6 +400,29 @@ describe('bot events for an assigned issue', () => {
       ['issue.edited', { fields: ['dueDate', 'startDate'] }],
       ['issue.edited', { fields: ['dueDate'] }],
     ]);
+  });
+
+  it('a roadmap bucket change queues issue.edited with fields ["roadmapBucket"]', async () => {
+    const issue = await botIssue('Bucketed');
+    const bucket = await prisma.roadmapBucket.create({
+      data: { projectId: ctx.projectId, name: 'Voorbeeld secret bucket', position: 0 },
+    });
+    const asOwner = <T>(fn: () => Promise<T>) =>
+      runWithRequestContext({ channel: 'ui', userId: ctx.owner.id }, fn);
+    await asOwner(() => setIssueBucket(ctx.projectId, issue.id, bucket.id));
+    // The same bucket again changes nothing
+    await asOwner(() => setIssueBucket(ctx.projectId, issue.id, bucket.id));
+    await asOwner(() => setIssueBucket(ctx.projectId, issue.id, null));
+    const events = await eventsOf(botA);
+    expect(events.map((e) => [e.type, (e.payload as { changes: unknown }).changes])).toEqual([
+      ['issue.edited', { fields: ['roadmapBucket'] }],
+      ['issue.edited', { fields: ['roadmapBucket'] }],
+    ]);
+    expect((events[0].payload as { actor: unknown }).actor).toEqual({
+      id: ctx.owner.id,
+      kind: 'PERSON',
+    });
+    expect(JSON.stringify(events[0].payload)).not.toContain('Voorbeeld secret bucket');
   });
 
   it('a comment queues issue.commented with the comment id', async () => {
