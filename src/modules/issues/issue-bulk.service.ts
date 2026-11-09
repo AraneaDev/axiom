@@ -7,7 +7,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
 import { ISSUE_WITH_COLUMN_INCLUDE } from '../../utils/prisma-selects';
-import { emitIssueEvents } from '../bot-events/emit';
+import { emitIssueEventsMany, type IssueChange } from '../bot-events/emit';
 
 import {
   assertAssignable,
@@ -142,7 +142,8 @@ export async function bulkUpdate(
 
   await invalidateIssueCache(projectId);
 
-  // One bot event check per issue, each with what changed on that issue
+  // Each issue's own change, checked for a bot in one query
+  const changes: IssueChange[] = [];
   for (const before of issues) {
     const fields: string[] = [];
     if (updates.priority !== undefined && updates.priority !== before.priority) {
@@ -156,7 +157,7 @@ export async function bulkUpdate(
       if (prev !== [...new Set(updates.labels)].sort().join('\n')) fields.push('labels');
     }
     const assigneeTo = updates.assigneeId === undefined ? undefined : (updates.assigneeId ?? null);
-    await emitIssueEvents({
+    changes.push({
       issueId: before.id,
       actorId: userId,
       assignee:
@@ -170,6 +171,7 @@ export async function bulkUpdate(
       changedFields: fields.sort(),
     });
   }
+  await emitIssueEventsMany(changes);
 
   return { updated: results.length, issues: results };
 }

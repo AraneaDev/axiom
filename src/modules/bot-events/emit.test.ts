@@ -30,7 +30,7 @@ import {
 } from '../service-accounts/service-accounts.service';
 import { addIssuesToSprint, removeIssueFromSprint } from '../sprints/sprints.service';
 
-import { MAX_PENDING_PER_BOT } from './emit';
+import { emitIssueEvents, MAX_PENDING_PER_BOT } from './emit';
 import { setBotWebhook } from './webhook-config.service';
 
 // A literal public address: the check needs no DNS
@@ -544,6 +544,76 @@ describe('bot events for an assigned issue', () => {
     await updateIssue(ctx.projectId, issue.number, { title: 'Human, edited' }, ctx.owner.id);
     await addComment(issue.id, ctx.owner.id, 'For a person');
     expect(await allEvents()).toHaveLength(0);
+  });
+
+  describe('a change that involves no bot', () => {
+    /** Spy on every lookup the emitter makes past its first check */
+    function spyPastCheck() {
+      return [
+        vi.spyOn(prisma.issue, 'findUnique'),
+        vi.spyOn(prisma.user, 'findUnique'),
+        vi.spyOn(prisma.teamMembership, 'findFirst'),
+        vi.spyOn(prisma.botWebhook, 'findUnique'),
+        vi.spyOn(prisma.botEvent, 'count'),
+        vi.spyOn(prisma.botEvent, 'createMany'),
+      ];
+    }
+
+    it('stops after one query for a person-only change', async () => {
+      const issue = await newIssue('People only', person.id);
+      const check = vi.spyOn(prisma.user, 'findMany');
+      const spies = spyPastCheck();
+      try {
+        await emitIssueEvents({
+          issueId: issue.id,
+          actorId: ctx.owner.id,
+          assignee: { from: ctx.owner.id, to: person.id },
+          changedFields: ['title'],
+          commentId: 'c1',
+        });
+        expect(check).toHaveBeenCalledTimes(1);
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+      } finally {
+        check.mockRestore();
+        for (const spy of spies) spy.mockRestore();
+      }
+      expect(await allEvents()).toHaveLength(0);
+    });
+
+    it('bulk checks every issue in one query', async () => {
+      const issues = [
+        await newIssue('Bulk people 1', person.id),
+        await newIssue('Bulk people 2', person.id),
+        await newIssue('Bulk people 3'),
+      ];
+      const spies = spyPastCheck();
+      try {
+        await bulkUpdate(
+          ctx.projectId,
+          issues.map((i) => i.id),
+          { priority: 'HIGH' },
+          ctx.owner.id,
+        );
+        for (const spy of spies.slice(1)) expect(spy).not.toHaveBeenCalled();
+        expect(spies[0]).not.toHaveBeenCalled();
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
+      expect(await allEvents()).toHaveLength(0);
+    });
+
+    it('bulk still queues for the one issue a bot has', async () => {
+      const issues = [await newIssue('Bulk mixed person', person.id), await botIssue('Bulk bot')];
+      await bulkUpdate(
+        ctx.projectId,
+        issues.map((i) => i.id),
+        { priority: 'LOW' },
+        ctx.owner.id,
+      );
+      const events = await allEvents();
+      expect(events.map((e) => [e.botId, e.type])).toEqual([[botA, 'issue.edited']]);
+      expect((events[0].payload as { issue: { id: string } }).issue.id).toBe(issues[1].id);
+    });
   });
 
   it('an emit failure does not fail the issue write', async () => {

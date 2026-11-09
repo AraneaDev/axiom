@@ -46,11 +46,60 @@ interface Target {
  * @param change - What changed on the issue, and who changed it
  */
 export async function emitIssueEvents(change: IssueChange): Promise<void> {
+  await emitIssueEventsMany([change]);
+}
+
+/**
+ * Queue the bot events of several issue changes, as bulk writes make them. One query finds the
+ * changes that involve a bot at all; the rest cost nothing more. Never throws.
+ * @param changes - One change per issue
+ */
+export async function emitIssueEventsMany(changes: IssueChange[]): Promise<void> {
+  let relevant: IssueChange[];
   try {
-    await emit(change);
+    relevant = await involvingBots(changes);
   } catch (err) {
-    logger.error('Failed to queue bot events', { issueId: change.issueId }, err as Error);
+    logger.error('Failed to queue bot events', { count: changes.length }, err as Error);
+    return;
   }
+  for (const change of relevant) {
+    try {
+      await emit(change);
+    } catch (err) {
+      logger.error('Failed to queue bot events', { issueId: change.issueId }, err as Error);
+    }
+  }
+}
+
+/**
+ * The changes a bot could hear of: an old or new assignee, or the issue's current assignee, is a
+ * service account. One query for all of them.
+ * @param changes - The changes
+ */
+async function involvingBots(changes: IssueChange[]): Promise<IssueChange[]> {
+  if (changes.length === 0) return [];
+  const named = [
+    ...new Set(
+      changes.flatMap((c) => [c.assignee?.from, c.assignee?.to]).filter((id): id is string => !!id),
+    ),
+  ];
+  const issueIds = [...new Set(changes.map((c) => c.issueId))];
+  const bots = await prisma.user.findMany({
+    where: {
+      kind: 'SERVICE',
+      OR: [{ id: { in: named } }, { assignedIssues: { some: { id: { in: issueIds } } } }],
+    },
+    select: { id: true, assignedIssues: { where: { id: { in: issueIds } }, select: { id: true } } },
+  });
+  if (bots.length === 0) return [];
+  const botIds = new Set(bots.map((b) => b.id));
+  const botIssues = new Set(bots.flatMap((b) => b.assignedIssues.map((i) => i.id)));
+  return changes.filter(
+    (c) =>
+      botIssues.has(c.issueId) ||
+      (!!c.assignee?.from && botIds.has(c.assignee.from)) ||
+      (!!c.assignee?.to && botIds.has(c.assignee.to)),
+  );
 }
 
 /**
