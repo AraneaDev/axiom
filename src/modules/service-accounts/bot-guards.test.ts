@@ -4,8 +4,6 @@
  * owner there does. A bot left with no owner is suspended; owners and org admins suspend and
  * resume it by hand.
  */
-import crypto from 'crypto';
-
 import type { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -25,6 +23,7 @@ import { logger } from '../../utils/logger';
 import { deleteUser } from '../admin/admin.service';
 import { removeOrgMember } from '../orgs/orgs.service';
 import { addTeamMember, deleteTeam } from '../teams/teams.service';
+import { createApiToken } from '../users/users.service';
 
 import { sweepServiceAccounts } from './bot-guards';
 import { setOwners } from './service-accounts.service';
@@ -43,25 +42,6 @@ const NOTICE = 'service_account';
 function withToken(method: 'get' | 'post' | 'patch' | 'delete', path: string, raw: string) {
   const req = request(app)[method](path);
   return req.set('Authorization', `Token ${raw}`).set('X-Requested-With', 'XMLHttpRequest');
-}
-
-/**
- * A personal token with these scopes, stored directly.
- * @param userId - Whose token
- * @param scopes - Its scopes
- */
-async function tokenOf(userId: string, scopes: string[]): Promise<string> {
-  const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
-  await prisma.apiToken.create({
-    data: {
-      userId,
-      name: 'Voorbeeld agent',
-      scopes,
-      prefix: raw.slice(0, 11),
-      tokenHash: crypto.createHash('sha256').update(raw).digest('hex'),
-    },
-  });
-  return raw;
 }
 
 /**
@@ -511,12 +491,22 @@ describe('service accounts: only where an owner is, and suspension', () => {
     const b = await bot([owner.id]);
     const approvalId = await pendingRequest(b.token);
 
-    const agent = await tokenOf(owner.id, ['orgs:write']);
+    // A token minted the way a person mints one: a scope that can't be minted can't stand in
+    const { token: agent } = await createApiToken(owner.id, {
+      name: 'Voorbeeld agent',
+      scopes: ['admin:write'],
+    });
     const viaToken = await withToken('post', `/api/service-accounts/${b.id}/suspend`, agent).send(
       {},
     );
     expect(viaToken.status).toBe(202);
     expect(viaToken.body.status).toBe('pending_approval');
+    const resumeViaToken = await withToken(
+      'post',
+      `/api/service-accounts/${b.id}/resume`,
+      agent,
+    ).send({});
+    expect(resumeViaToken.status).toBe(202);
     expect((await account(b.id)).status).toBe('ACTIVE');
 
     const stranger = await authPost(`/api/service-accounts/${b.id}/suspend`, outsider.token, {});
@@ -847,6 +837,25 @@ describe('service accounts: only where an owner is, and suspension', () => {
       [owner.id, 'MEMBER'],
       [b.id, 'MEMBER'],
     ]);
+    const lock = await holdLock(
+      (tx) =>
+        tx.$queryRaw`SELECT "userId" FROM service_accounts WHERE "userId" = ${b.id} FOR UPDATE`,
+    );
+    const removal = deleteTeam(teamId);
+    expect(await settledWithin(removal, 300)).toBe('pending');
+    await lock.release();
+    await expect(removal).resolves.toBeUndefined();
+    expect(await prisma.team.count({ where: { id: teamId } })).toBe(0);
+  });
+
+  it("N3: deleting a team takes the row of a bot tied to it only by a page's list", async () => {
+    const owner = await person();
+    const b = await bot([owner.id], false);
+    const { teamId, spaceId: s } = await newTeam([[owner.id, 'MEMBER']]);
+    const page = await prisma.page.create({
+      data: { spaceId: s, title: 'Voorbeeld lijst', slug: `voorbeeld-lijst-${++n}`, body: 'Hallo' },
+    });
+    await prisma.pageRestriction.create({ data: { pageId: page.id, type: 'EDIT', userId: b.id } });
     const lock = await holdLock(
       (tx) =>
         tx.$queryRaw`SELECT "userId" FROM service_accounts WHERE "userId" = ${b.id} FOR UPDATE`,

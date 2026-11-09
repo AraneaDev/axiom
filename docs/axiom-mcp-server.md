@@ -519,7 +519,7 @@ On an issue approval gate, a bot's owners count as the requester: where self-app
 
 A suspended bot's tokens answer `401 SERVICE_ACCOUNT_SUSPENDED` and its waiting requests are cancelled. A bot is suspended two ways:
 
-- **By hand.** An owner or an org admin calls `serviceAccount.suspend`, the one button that stops a leaked token's bot at once. `serviceAccount.resume` starts it again. Both are admin actions: a token's call waits for approval.
+- **By hand.** An owner or an org admin calls `serviceAccount.suspend`, the one button that stops a leaked token's bot at once. `serviceAccount.resume` starts it again. Both are admin actions in the `admin` area: a token with `admin:write` may ask, and its call waits for approval.
 - **Orphaned.** The bot lost its last owner. The org's owners and admins are notified. Giving it an owner (`serviceAccount.setOwners`) resumes it; `serviceAccount.resume` refuses an orphan (`400 SERVICE_ACCOUNT_ORPHANED`). An orphan keeps its places, so the new owners need to be able to open them.
 
 A bot suspended by hand that then loses its owners stays suspended by hand: only resume lifts that. Suspending an orphan by hand does the same, so a new owner no longer resumes it. `serviceAccount.resume` also refuses a bot that sits in a team, space or page none of its owners can open (`400 SERVICE_ACCOUNT_OWNER_NEEDED`). While suspended, a bot gets no new tokens and none rotated (`400 SERVICE_ACCOUNT_SUSPENDED`). Suspension is a bot's only off switch: a platform admin can't deactivate it instead (`400 SERVICE_ACCOUNT_USE_SUSPEND`).

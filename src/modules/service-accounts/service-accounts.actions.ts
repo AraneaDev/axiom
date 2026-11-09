@@ -120,7 +120,7 @@ registerActions([
     name: 'serviceAccount.suspend',
     orgLevel: true,
     admin: true,
-    area: 'orgs',
+    area: 'admin',
     kind: 'write',
     summary:
       'Suspend a service account: its tokens stop working and its waiting requests are cancelled',
@@ -137,7 +137,7 @@ registerActions([
     name: 'serviceAccount.resume',
     orgLevel: true,
     admin: true,
-    area: 'orgs',
+    area: 'admin',
     kind: 'write',
     summary:
       'Resume a service account suspended by hand. One without an owner resumes when it gets one',

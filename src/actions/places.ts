@@ -390,9 +390,10 @@ export const savedQueryPlace: PlaceResolver = async (_ctx, input) => {
 };
 
 /**
- * A dashboard widget: the dashboard, and the saved query the widget names, as stored. The query
- * runs with the bot's rights when the dashboard renders, so who decides must be able to open it
- * too. A query or a dashboard that names nothing leaves a request nobody decides.
+ * A dashboard widget: the dashboard, and the saved query the widget names, as stored. A widget
+ * renders with each viewer's own rights, but adding one puts the query in front of everyone the
+ * dashboard is shared with, so who decides must be able to open the query's place too. A query or
+ * a dashboard that names nothing leaves a request nobody decides.
  * @param ctx - Who runs it
  * @param input - Its validated input, with id and savedQueryId
  */

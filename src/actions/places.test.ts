@@ -223,30 +223,30 @@ describe('place resolvers', () => {
   const cases: Case[] = [
     ['orgLevelPlace', places.orgLevelPlace, () => ({}), () => ({ orgLevel: true })],
     ['inputPlace, nothing named', places.inputPlace, () => ({}), () => ({})],
-    [
-      'inputPlace, team, projects, issues and sprint',
-      places.inputPlace,
-      () => ({
-        teamId: otherTeamId,
-        projectId: ctx.projectId,
-        targetProjectId: otherProjectId,
-        issueIds: [issueId, otherIssueId],
-        sprintId,
-      }),
-      () => ({ teamIds: [ctx.teamId, otherTeamId] }),
-    ],
-    [
-      'inputPlace, spaces and pages',
-      places.inputPlace,
-      () => ({
-        spaceId,
-        targetSpaceId: otherSpaceId,
-        pageId,
-        parentId: childPageId,
-        targetParentId: pageId,
-      }),
-      () => ({ spaceIds: [spaceId, otherSpaceId], pageIds: [pageId, childPageId] }),
-    ],
+    // One field per case: a resolver that stops reading any one of them fails its case
+    ...(
+      [
+        ['teamId', () => otherTeamId, () => ({ teamIds: [otherTeamId] })],
+        ['projectId', () => ctx.projectId, () => ({ teamIds: [ctx.teamId] })],
+        ['targetProjectId', () => otherProjectId, () => ({ teamIds: [otherTeamId] })],
+        ['issueId', () => issueId, () => ({ teamIds: [ctx.teamId] })],
+        ['issueIds', () => [otherIssueId], () => ({ teamIds: [otherTeamId] })],
+        ['sprintId', () => sprintId, () => ({ teamIds: [ctx.teamId] })],
+        ['spaceId', () => spaceId, () => ({ spaceIds: [spaceId] })],
+        ['targetSpaceId', () => otherSpaceId, () => ({ spaceIds: [otherSpaceId] })],
+        ['releaseNotesSpaceId', () => otherSpaceId, () => ({ spaceIds: [otherSpaceId] })],
+        ['pageId', () => pageId, () => ({ pageIds: [pageId] })],
+        ['parentId', () => childPageId, () => ({ pageIds: [childPageId] })],
+        ['targetParentId', () => pageId, () => ({ pageIds: [pageId] })],
+      ] as Array<[string, () => unknown, () => PlaceRefs]>
+    ).map(
+      ([field, value, want]): Case => [
+        `inputPlace, ${field} alone`,
+        places.inputPlace,
+        () => ({ [field]: value() }),
+        want,
+      ],
+    ),
     [
       'inputPlace, a slug that names a page',
       places.inputPlace,
@@ -258,12 +258,6 @@ describe('place resolvers', () => {
       places.inputPlace,
       () => ({ spaceId, pageSlug: 'nog-niet' }),
       () => ({ spaceIds: [spaceId] }),
-    ],
-    [
-      'inputPlace, release notes space',
-      places.inputPlace,
-      () => ({ releaseNotesSpaceId: otherSpaceId }),
-      () => ({ spaceIds: [otherSpaceId] }),
     ],
     [
       'inputPlace, ids that name nothing',

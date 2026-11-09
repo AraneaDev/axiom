@@ -837,8 +837,8 @@ Who may call them: an org owner or admin (a platform admin too) for everything; 
 | `PATCH /api/service-accounts/:id` | `serviceAccount.update` | Web UI only. `displayName`, `description` |
 | `PUT /api/service-accounts/:id/owners` | `serviceAccount.setOwners` | Web UI only. `ownerIds` replaces the owners; resumes an orphaned bot |
 | `DELETE /api/service-accounts/:id` | `serviceAccount.delete` | Web UI only. Tokens, memberships and owners go, waiting requests are cancelled; the deactivated user stays as the author of its history. `204` |
-| `POST /api/service-accounts/:id/suspend` | `serviceAccount.suspend` | Admin action. Its tokens stop at once and its waiting requests are cancelled |
-| `POST /api/service-accounts/:id/resume` | `serviceAccount.resume` | Admin action. Resumes a bot suspended by hand |
+| `POST /api/service-accounts/:id/suspend` | `serviceAccount.suspend` | Admin action (`admin:write`). Its tokens stop at once and its waiting requests are cancelled |
+| `POST /api/service-accounts/:id/resume` | `serviceAccount.resume` | Admin action (`admin:write`). Resumes a bot suspended by hand |
 | `POST /api/service-accounts/:id/tokens` | `serviceAccount.createToken` | Web UI only. `name`, `scopes` (no `admin`), `expiresInDays` (1 to 365, 90 by default). The raw `token` is in this response only. `201` |
 | `POST /api/service-accounts/:id/tokens/:tokenId/rotate` | `serviceAccount.rotateToken` | Web UI only. A new token with the same name, scopes and lifetime; the old one stops within 7 days |
 | `DELETE /api/service-accounts/:id/tokens/:tokenId` | `serviceAccount.revokeToken` | Web UI only. At once. `204` |
