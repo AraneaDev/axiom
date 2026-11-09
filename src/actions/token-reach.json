@@ -283,6 +283,7 @@
   "serviceAccount.setOwners": [],
   "serviceAccount.setWebhook": [],
   "serviceAccount.suspend": ["admin:write"],
+  "serviceAccount.testWebhook": [],
   "serviceAccount.update": [],
   "serviceAccount.webhook": ["orgs:read", "orgs:write"],
   "siteSettings.get": [],

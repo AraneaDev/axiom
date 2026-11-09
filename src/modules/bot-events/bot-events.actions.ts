@@ -4,6 +4,7 @@ import { defineAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import { assertOwnerOrOrgAdmin } from '../service-accounts/service-accounts.service';
 
+import { sendTestEvent } from './sender';
 import * as service from './webhook-config.service';
 
 const botTarget = z.object({ id: z.string() });
@@ -66,6 +67,21 @@ registerActions([
     rest: { method: 'POST', path: '/api/service-accounts/:id/webhook/resume', status: 200 },
     authorize: async (ctx, { id }) => assertOwnerOrOrgAdmin(ctx.userId, id),
     handler: async (_ctx, { id }) => service.resumeBotWebhook(id),
+  }),
+  defineAction({
+    name: 'serviceAccount.testWebhook',
+    uiOnly: true,
+    area: 'orgs',
+    kind: 'write',
+    summary:
+      "Send a ping to a bot's webhook now, even while paused, and log it; the failure count and " +
+      'the pause stay as they are',
+    target: botTarget,
+    input: botTarget,
+    output: z.looseObject({ id: z.string(), type: z.string(), status: z.string() }),
+    rest: { method: 'POST', path: '/api/service-accounts/:id/webhook/test', status: 200 },
+    authorize: async (ctx, { id }) => assertOwnerOrOrgAdmin(ctx.userId, id),
+    handler: async (_ctx, { id }) => sendTestEvent(id),
   }),
   defineAction({
     name: 'serviceAccount.webhook',

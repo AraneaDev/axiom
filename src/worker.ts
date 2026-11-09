@@ -10,6 +10,7 @@ import {
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
 import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
+import { runBotDeliveries } from './modules/bot-events/deliveries.job';
 import { cleanupAutomationMarks } from './modules/github/github-automation';
 import { runDueImports } from './modules/github/import-run.service';
 import { reconcileDueRepos } from './modules/github/reconcile.service';
@@ -25,10 +26,12 @@ const GITHUB_RECONCILE_TICK_MS = 60 * 1000;
 const GITHUB_MARK_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const GITHUB_IMPORT_TICK_MS = 15 * 1000;
 const SERVICE_ACCOUNT_INTERVAL_MS = 60 * 60 * 1000;
+const BOT_DELIVERY_TICK_MS = 15 * 1000;
 let reconcileRunning = false;
 let importRunning = false;
 let markCleanupRunning = false;
 let serviceAccountsRunning = false;
+let botDeliveriesRunning = false;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
 function runUploadCleanup(): void {
@@ -118,6 +121,19 @@ function runServiceAccountJobs(): void {
     });
 }
 
+/** Send the due bot events and trim old ones; a tick that outlasts 15 s makes the next one wait. */
+function runBotDeliveryJobs(): void {
+  if (botDeliveriesRunning) return;
+  botDeliveriesRunning = true;
+  runBotDeliveries()
+    .catch((err) => {
+      logger.error('Bot event deliveries failed', {}, err as Error);
+    })
+    .finally(() => {
+      botDeliveriesRunning = false;
+    });
+}
+
 async function main(): Promise<void> {
   assertRedisEnabled();
   // The worker has no sockets: what it stores reaches browsers through the API over Redis
@@ -152,6 +168,9 @@ async function main(): Promise<void> {
   runServiceAccountJobs();
   const serviceAccounts = setInterval(runServiceAccountJobs, SERVICE_ACCOUNT_INTERVAL_MS);
 
+  runBotDeliveryJobs();
+  const botDeliveries = setInterval(runBotDeliveryJobs, BOT_DELIVERY_TICK_MS);
+
   logger.info('Axiom worker running');
 
   const shutdown = async (signal: string) => {
@@ -163,6 +182,7 @@ async function main(): Promise<void> {
     clearInterval(githubImports);
     clearInterval(githubMarkCleanup);
     clearInterval(serviceAccounts);
+    clearInterval(botDeliveries);
     closeRealtimePublisher();
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
