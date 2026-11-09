@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { typedCustomFieldValue } from '../../lib/query-engine';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { emitIssueEvents } from '../bot-events/emit';
 
 import { assertCustomFieldValue } from './custom-field-values';
 
@@ -146,7 +147,7 @@ export async function setFieldValue(issueId: string, fieldDefinitionId: string, 
   }
   await assertCustomFieldValue(definition, value);
 
-  return prisma.customFieldValue.upsert({
+  const saved = await prisma.customFieldValue.upsert({
     where: {
       issueId_fieldDefinitionId: { issueId, fieldDefinitionId },
     },
@@ -154,6 +155,9 @@ export async function setFieldValue(issueId: string, fieldDefinitionId: string, 
     update: typedCustomFieldValue(value),
     include: { fieldDefinition: true },
   });
+  // A custom field's name is the project's own text: the event names the kind, not the field
+  await emitIssueEvents({ issueId, changedFields: ['customFields'] });
+  return saved;
 }
 
 /**

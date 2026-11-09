@@ -3,6 +3,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
+import { emitIssueEvents } from '../bot-events/emit';
 
 import { findIssueOrThrow } from './issue-utils';
 
@@ -45,6 +46,8 @@ export async function logWork(
     description: description ?? '',
     totalSpent: updated.timeSpent,
   });
+
+  await emitIssueEvents({ issueId: issue.id, actorId: userId, changedFields: ['timeSpent'] });
 
   return { timeSpent: updated.timeSpent, logged: minutes };
 }

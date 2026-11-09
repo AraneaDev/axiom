@@ -16,11 +16,14 @@ import {
   deleteRule,
   evaluateRules,
 } from '../automation/automation.service';
+import { setFieldValue } from '../custom-fields/custom-fields.service';
 import { moveIssue } from '../issues/issue-board.service';
 import { bulkUpdate } from '../issues/issue-bulk.service';
 import { addComment } from '../issues/issue-comments.service';
 import { setParent } from '../issues/issue-hierarchy.service';
+import { logWork } from '../issues/issue-time.service';
 import { createIssue, updateIssue } from '../issues/issues.service';
+import { setIssueDates } from '../roadmap/roadmap.service';
 import {
   createServiceAccount,
   suspendServiceAccount,
@@ -338,6 +341,64 @@ describe('bot events for an assigned issue', () => {
     expect(events.map((e) => [e.type, (e.payload as { changes: unknown }).changes])).toEqual([
       ['issue.edited', { fields: ['parent'] }],
       ['issue.edited', { fields: ['parent'] }],
+    ]);
+  });
+
+  it('setting a custom field queues issue.edited with fields ["customFields"]', async () => {
+    const issue = await botIssue('Custom');
+    const field = await prisma.customFieldDefinition.create({
+      data: { projectId: ctx.projectId, name: 'Voorbeeld secret field', type: 'TEXT' },
+    });
+    await runWithRequestContext({ channel: 'ui', userId: ctx.owner.id }, () =>
+      setFieldValue(issue.id, field.id, 'acme value'),
+    );
+    const events = await eventsOf(botA);
+    expect(events.map((e) => [e.type, (e.payload as { changes: unknown }).changes])).toEqual([
+      ['issue.edited', { fields: ['customFields'] }],
+    ]);
+    expect((events[0].payload as { actor: unknown }).actor).toEqual({
+      id: ctx.owner.id,
+      kind: 'PERSON',
+    });
+    expect(JSON.stringify(events[0].payload)).not.toMatch(/Voorbeeld secret field|acme value/);
+  });
+
+  it('logging time queues issue.edited with fields ["timeSpent"]', async () => {
+    const issue = await botIssue('Timed');
+    await runWithRequestContext({ channel: 'ui', userId: person.id }, () =>
+      logWork(ctx.projectId, issue.number, person.id, 30, 'Voorbeeld work'),
+    );
+    const events = await eventsOf(botA);
+    expect(events.map((e) => [e.type, (e.payload as { changes: unknown }).changes])).toEqual([
+      ['issue.edited', { fields: ['timeSpent'] }],
+    ]);
+    expect((events[0].payload as { actor: unknown }).actor).toEqual({
+      id: person.id,
+      kind: 'PERSON',
+    });
+  });
+
+  it('roadmap dates queue issue.edited with the date fields that changed', async () => {
+    const issue = await botIssue('Dated');
+    const asOwner = <T>(fn: () => Promise<T>) =>
+      runWithRequestContext({ channel: 'ui', userId: ctx.owner.id }, fn);
+    await asOwner(() =>
+      setIssueDates(ctx.projectId, issue.id, {
+        startDate: '2026-12-01T00:00:00.000Z',
+        dueDate: '2026-12-10T00:00:00.000Z',
+      }),
+    );
+    await asOwner(() =>
+      setIssueDates(ctx.projectId, issue.id, { dueDate: '2026-12-12T00:00:00.000Z' }),
+    );
+    // The same date again changes nothing
+    await asOwner(() =>
+      setIssueDates(ctx.projectId, issue.id, { startDate: '2026-12-01T00:00:00.000Z' }),
+    );
+    const events = await eventsOf(botA);
+    expect(events.map((e) => [e.type, (e.payload as { changes: unknown }).changes])).toEqual([
+      ['issue.edited', { fields: ['dueDate', 'startDate'] }],
+      ['issue.edited', { fields: ['dueDate'] }],
     ]);
   });
 

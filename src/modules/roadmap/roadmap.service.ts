@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { emitIssueEvents } from '../bot-events/emit';
 
 import type {
   createBucketSchema,
@@ -256,11 +257,17 @@ export async function setIssueDates(
   if (startDate && dueDate && startDate > dueDate) {
     throw new AppError(400, 'The start date is after the due date');
   }
-  return prisma.issue.update({
+  const updated = await prisma.issue.update({
     where: { id: issueId },
     data: { startDate, dueDate },
     select: ISSUE_ROADMAP_SELECT,
   });
+  const time = (d: Date | null) => d?.getTime() ?? null;
+  const changedFields: string[] = [];
+  if (time(dueDate) !== time(issue.dueDate)) changedFields.push('dueDate');
+  if (time(startDate) !== time(issue.startDate)) changedFields.push('startDate');
+  if (changedFields.length > 0) await emitIssueEvents({ issueId, changedFields });
+  return updated;
 }
 
 /**
