@@ -61,18 +61,27 @@ registerActions([
     name: 'serviceAccount.get',
     area: 'orgs',
     kind: 'read',
-    summary:
-      'Read one service account: status, owners, memberships, tokens, and the teams and spaces ' +
-      'it may join (joinable)',
+    summary: 'Read one service account: status, owners, memberships and tokens',
     target: botTarget,
     input: botTarget,
     output: record,
     rest: { method: 'GET', path: '/api/service-accounts/:id' },
     authorize: async (ctx, { id }) => service.assertCanAccess(ctx.userId, id, 'read'),
-    handler: async (ctx, { id }) => ({
-      ...(await service.describeServiceAccount(id)),
-      joinable: await service.joinablePlaces(id, ctx.userId),
-    }),
+    handler: async (_ctx, { id }) => service.describeServiceAccount(id),
+  }),
+  defineAction({
+    name: 'serviceAccount.joinable',
+    area: 'orgs',
+    kind: 'read',
+    summary:
+      'The teams and spaces a service account may be added to: where one of its owners is, and ' +
+      'a space only when the grant leaves its other readers as they are',
+    target: botTarget,
+    input: botTarget,
+    output: z.looseObject({ teams: z.array(record), spaces: z.array(record) }),
+    rest: { method: 'GET', path: '/api/service-accounts/:id/joinable' },
+    authorize: async (ctx, { id }) => service.assertCanAccess(ctx.userId, id, 'read'),
+    handler: async (ctx, { id }) => service.joinablePlaces(id, ctx.userId),
   }),
   defineAction({
     name: 'serviceAccount.activity',

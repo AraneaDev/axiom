@@ -511,15 +511,23 @@ describe('service accounts: the list and the activity of a bot', () => {
     }
   });
 
-  it('get offers the teams and spaces an owner can open and the bot is not in yet', async () => {
-    const res = await authGet(`/api/service-accounts/${botId}`, owner.token);
+  it('joinable offers the teams an owner is in and the bot is not, and get no longer carries it', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/joinable`, owner.token);
     expect(res.status).toBe(200);
-    const teamIds = (res.body.joinable.teams as Array<{ id: string }>).map((t) => t.id);
+    const teamIds = (res.body.teams as Array<{ id: string }>).map((t) => t.id);
     // Ops has its owner; the bot's own team and the team no owner is in are not offered
     expect(teamIds).toEqual([opsTeamId]);
-    const spaceIds = (res.body.joinable.spaces as Array<{ id: string }>).map((sp) => sp.id);
-    expect(spaceIds).toContain(spaceId);
+    const spaceIds = (res.body.spaces as Array<{ id: string }>).map((sp) => sp.id);
+    // Runbooks is open to its team, which the bot is in: it reaches it already
+    expect(spaceIds).not.toContain(spaceId);
     expect(spaceIds).not.toContain(hiddenSpaceId);
+    const read = await authGet(`/api/service-accounts/${botId}`, owner.token);
+    expect(read.body).not.toHaveProperty('joinable');
+  });
+
+  it('joinable is refused to a stranger as if the bot did not exist', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/joinable`, stranger.token);
+    expect(res.status).toBe(404);
   });
 
   it("a bot's member profile names its kind", async () => {
@@ -536,5 +544,111 @@ describe('service accounts: the list and the activity of a bot', () => {
     expect(res.status).toBe(200);
     const row = res.body.find((m: { userId: string }) => m.userId === owner.id);
     expect(row.user).toHaveProperty('deactivatedAt', null);
+  });
+});
+
+describe('service accounts: where a bot may be added', () => {
+  let ctx: TestContext;
+  let owner: TestUser;
+  let botId: string;
+  let docsTeamId: string;
+  let openSpaceId: string;
+  let grantedSpaceId: string;
+  let adminOnlySpaceId: string;
+  let reachedSpaceId: string;
+
+  beforeAll(async () => {
+    ctx = await createTestContext('svcjoin');
+    owner = await createTestUser({ username: 'voorbeeld-owner-svcjoin' });
+    await prisma.orgMembership.create({
+      data: { orgId: ctx.orgId, userId: owner.id, role: 'MEMBER' },
+    });
+    await prisma.teamMembership.create({
+      data: { teamId: ctx.teamId, userId: owner.id, role: 'MEMBER' },
+    });
+    const bot = await prisma.user.create({
+      data: {
+        email: 'join-bot@service.invalid',
+        username: 'acme-join-bot',
+        displayName: 'Join bot',
+        passwordHash: '!',
+        kind: 'SERVICE',
+        orgMemberships: { create: { orgId: ctx.orgId, role: 'MEMBER' } },
+        teamMemberships: { create: { teamId: ctx.teamId, role: 'MEMBER' } },
+        serviceAccount: {
+          create: {
+            orgId: ctx.orgId,
+            createdById: ctx.owner.id,
+            owners: { create: { ownerId: owner.id } },
+          },
+        },
+      },
+    });
+    botId = bot.id;
+    // A team the owner is in and the bot is not
+    docsTeamId = (
+      await prisma.team.create({
+        data: {
+          orgId: ctx.orgId,
+          name: 'Docs',
+          slug: 'docs-svcjoin',
+          members: { create: { userId: owner.id, role: 'MEMBER' } },
+        },
+      })
+    ).id;
+    const space = (name: string, slug: string, teamId: string, grants: object[] = []) =>
+      prisma.wikiSpace
+        .create({ data: { teamId, name, slug, permissions: { create: grants } } })
+        .then((s) => s.id);
+    // Open to its team: the bot's grant would be the first and close it to everyone else
+    openSpaceId = await space('Open', 'open-svcjoin', docsTeamId);
+    // Members of the team may view it by a grant: the owner keeps it after the bot's grant
+    grantedSpaceId = await space('Granted', 'granted-svcjoin', docsTeamId, [
+      { teamRole: 'MEMBER', level: 'VIEW' },
+    ]);
+    // Only team admins: the owner, a member, can't open it
+    adminOnlySpaceId = await space('Admins', 'admins-svcjoin', docsTeamId, [
+      { teamRole: 'ADMIN', level: 'ADMIN' },
+    ]);
+    // In the bot's own team, granted to members: the bot reaches it already
+    reachedSpaceId = await space('Reached', 'reached-svcjoin', ctx.teamId, [
+      { teamRole: 'MEMBER', level: 'EDIT' },
+    ]);
+  });
+
+  afterAll(async () => {
+    await cleanupTestContext(ctx);
+    await prisma.user.deleteMany({ where: { id: { in: [owner.id, botId] } } });
+  });
+
+  it('offers only a space with grants that the bot does not reach and an owner keeps', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/joinable`, ctx.owner.token);
+    expect(res.status).toBe(200);
+    const spaces = res.body.spaces as Array<{ id: string; name: string; teamName: string }>;
+    expect(spaces.map((s) => s.id)).toEqual([grantedSpaceId]);
+    expect(spaces[0].teamName).toBe('Docs');
+    const ids = spaces.map((s) => s.id);
+    expect(ids).not.toContain(openSpaceId);
+    expect(ids).not.toContain(adminOnlySpaceId);
+    expect(ids).not.toContain(reachedSpaceId);
+    expect((res.body.teams as Array<{ id: string }>).map((t) => t.id)).toEqual([docsTeamId]);
+  });
+
+  it('every offered space and team can be added, with a 2xx', async () => {
+    const res = await authGet(`/api/service-accounts/${botId}/joinable`, ctx.owner.token);
+    for (const sp of res.body.spaces as Array<{ id: string }>) {
+      const add = await authPut(`/api/wiki/spaces/${sp.id}/permissions`, ctx.owner.token, {
+        userId: botId,
+        level: 'EDIT',
+      });
+      expect(add.status, add.body?.error?.code).toBeLessThan(300);
+    }
+    for (const team of res.body.teams as Array<{ id: string }>) {
+      const add = await authPost(`/api/teams/${team.id}/members`, ctx.owner.token, {
+        userId: botId,
+        role: 'MEMBER',
+      });
+      expect(add.status, add.body?.error?.code).toBeLessThan(300);
+    }
   });
 });

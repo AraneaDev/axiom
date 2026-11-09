@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   resume: vi.fn(),
   delete: vi.fn(),
   approvals: vi.fn(),
+  joinable: vi.fn(),
   addTeamMember: vi.fn(),
   setSpacePermission: vi.fn(),
 }));
@@ -43,6 +44,7 @@ vi.mock('@/api/service-accounts.api', async (importOriginal) => {
     serviceAccountsApi: {
       get: api.get,
       activity: api.activity,
+      joinable: api.joinable,
       update: api.update,
       setOwners: api.setOwners,
       suspend: api.suspend,
@@ -95,17 +97,18 @@ function detail(over: Record<string, unknown> = {}) {
         createdAt: '2026-11-01T00:00:00Z',
       },
     ],
-    joinable: { teams: [], spaces: [] },
     ...over,
   };
 }
 
-function show(role = 'ADMIN', orgs?: Array<typeof ORG & { role: string }>) {
+function show(
+  role = 'ADMIN',
+  orgs?: Array<typeof ORG & { role: string }>,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   api.orgs.mockResolvedValue(orgs ?? [{ ...ORG, role }]);
   render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/acme-labs/settings/service-accounts/bot-1']}>
         <Routes>
           <Route path="/:org/settings/service-accounts/:id" element={<ServiceAccountDetail />} />
@@ -383,53 +386,93 @@ describe('ServiceAccountDetail', () => {
     await waitFor(() => expect(api.suspend).toHaveBeenCalledWith('bot-1'));
   });
 
-  it('adds the bot to a team its owners are in, as a member by default', async () => {
-    api.get.mockResolvedValue(
-      detail({ joinable: { teams: [{ id: 't2', name: 'Ops', slug: 'ops' }], spaces: [] } }),
-    );
+  it('adds the bot to a team its owners are in, as a member by default, and refreshes its members', async () => {
+    api.get.mockResolvedValue(detail());
+    api.joinable.mockResolvedValue({ teams: [{ id: 't2', name: 'Ops', slug: 'ops' }], spaces: [] });
     api.addTeamMember.mockResolvedValue({});
-    show();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['team-members', 't2'], []);
+    show('ADMIN', undefined, client);
     fireEvent.click(await screen.findByRole('button', { name: /Add to team/ }));
     const dialog = await screen.findByRole('dialog');
+    // What it may join is read when the dialog opens, not with the bot
+    await waitFor(() => expect(api.joinable).toHaveBeenCalledWith('bot-1'));
+    expect(await within(dialog).findByText('Ops')).toBeInTheDocument();
     fireEvent.click(within(dialog).getByLabelText('Role'));
     expect(within(dialog).queryByText('Admin')).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: /^Add$/ }));
     await waitFor(() => expect(api.addTeamMember).toHaveBeenCalledWith('t2', 'bot-1', 'MEMBER'));
+    await waitFor(() =>
+      expect(client.getQueryState(['team-members', 't2'])?.isInvalidated).toBe(true),
+    );
+  });
+
+  it('does not read what the bot may join until a dialog opens', async () => {
+    api.get.mockResolvedValue(detail());
+    show();
+    await screen.findByText('Triages the backlog every night');
+    expect(api.joinable).not.toHaveBeenCalled();
   });
 
   it('a refused add to team says why in the dialog', async () => {
-    api.get.mockResolvedValue(
-      detail({ joinable: { teams: [{ id: 't2', name: 'Ops', slug: 'ops' }], spaces: [] } }),
-    );
+    api.get.mockResolvedValue(detail());
+    api.joinable.mockResolvedValue({ teams: [{ id: 't2', name: 'Ops', slug: 'ops' }], spaces: [] });
     api.addTeamMember.mockRejectedValue(new ApiError(400, 'x', 'SERVICE_ACCOUNT_OWNER_NOT_MEMBER'));
     show();
     fireEvent.click(await screen.findByRole('button', { name: /Add to team/ }));
     const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('Ops');
     fireEvent.click(within(dialog).getByRole('button', { name: /^Add$/ }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       /one of its owners can open/,
     );
   });
 
-  it('adds the bot to a space, with edit by default', async () => {
-    api.get.mockResolvedValue(
-      detail({ joinable: { teams: [], spaces: [{ id: 's2', name: 'Runbooks', slug: 'rb' }] } }),
-    );
+  it('adds the bot to a space named with its team, with edit by default, and refreshes its permissions', async () => {
+    api.get.mockResolvedValue(detail());
+    api.joinable.mockResolvedValue({
+      teams: [],
+      spaces: [{ id: 's2', name: 'Runbooks', slug: 'rb', teamName: 'Ops' }],
+    });
     api.setSpacePermission.mockResolvedValue({});
-    show();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['space-permissions', 's2'], []);
+    show('ADMIN', undefined, client);
     fireEvent.click(await screen.findByRole('button', { name: /Add to space/ }));
     const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('Ops / Runbooks')).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: /^Add$/ }));
     await waitFor(() =>
       expect(api.setSpacePermission).toHaveBeenCalledWith('s2', { userId: 'bot-1', level: 'EDIT' }),
     );
+    await waitFor(() =>
+      expect(client.getQueryState(['space-permissions', 's2'])?.isInvalidated).toBe(true),
+    );
   });
 
-  it('offers no add when no team or space of its owners is left', async () => {
+  it('says so in the dialog when no team or space of its owners is left', async () => {
     api.get.mockResolvedValue(detail());
+    api.joinable.mockResolvedValue({ teams: [], spaces: [] });
     show();
+    fireEvent.click(await screen.findByRole('button', { name: /Add to space/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText(/No space to add it to/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /^Add$/ })).toBeDisabled();
+  });
+
+  it('offers the add buttons to org owners and admins only, not to an owner who is a member', async () => {
+    authUser.current = { id: JAN.id, isAdmin: false };
+    api.get.mockResolvedValue(detail());
+    show('MEMBER');
     await screen.findByText('Triages the backlog every night');
     expect(screen.queryByRole('button', { name: /Add to team/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Add to space/ })).toBeNull();
+  });
+
+  it('offers them to a platform admin outside the org', async () => {
+    authUser.current = { id: 'u-platform', isAdmin: true };
+    api.get.mockResolvedValue(detail());
+    show('MEMBER', []);
+    expect(await screen.findByRole('button', { name: /Add to team/ })).toBeInTheDocument();
   });
 });

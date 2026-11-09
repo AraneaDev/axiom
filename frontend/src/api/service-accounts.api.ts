@@ -67,12 +67,21 @@ export interface JoinablePlace {
   slug: string;
 }
 
+/** A space the bot may be granted: space names are unique within a team only */
+export interface JoinableSpace extends JoinablePlace {
+  teamName: string;
+}
+
+/** Where a bot may be added, read when an add dialog opens */
+export interface JoinablePlaces {
+  teams: JoinablePlace[];
+  spaces: JoinableSpace[];
+}
+
 /** One bot with its places and tokens */
 export interface ServiceAccountDetail extends Omit<ServiceAccountSummary, 'lastUsedAt'> {
   spaces: { id: string; name: string; slug: string; level: string }[];
   tokens: ServiceAccountToken[];
-  /** Only on a read of the bot itself, not on what a change answers */
-  joinable?: { teams: JoinablePlace[]; spaces: JoinablePlace[] };
 }
 
 /** One activity of a bot, with the issue or page it is about */
@@ -88,6 +97,8 @@ export const serviceAccountsApi = {
   get: (id: string) => get<ServiceAccountDetail>(`/service-accounts/${encodeURIComponent(id)}`),
   activity: (id: string) =>
     get<ServiceAccountActivity[]>(`/service-accounts/${encodeURIComponent(id)}/activity`),
+  joinable: (id: string) =>
+    get<JoinablePlaces>(`/service-accounts/${encodeURIComponent(id)}/joinable`),
   create: (
     orgId: string,
     data: { username: string; displayName: string; description?: string; ownerIds: string[] },

@@ -272,6 +272,7 @@
   "serviceAccount.createToken": [],
   "serviceAccount.delete": [],
   "serviceAccount.get": ["orgs:read", "orgs:write"],
+  "serviceAccount.joinable": ["orgs:read", "orgs:write"],
   "serviceAccount.list": ["orgs:read", "orgs:write"],
   "serviceAccount.resume": ["admin:write"],
   "serviceAccount.revokeToken": [],

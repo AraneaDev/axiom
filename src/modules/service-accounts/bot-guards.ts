@@ -236,6 +236,16 @@ async function whoCanOpen(
 }
 
 /**
+ * Of some users, those who can open a place now, by the rule the membership writes check: what an
+ * offer of a place uses, without locking anything.
+ * @param place - The team, space or page
+ * @param userIds - The users
+ */
+export async function whoCanOpenNow(place: Place, userIds: string[]): Promise<string[]> {
+  return whoCanOpen(prisma, place, userIds, false);
+}
+
+/**
  * Whether one of these owners can open a place, with the rows that say so locked.
  * @param tx - The transaction
  * @param place - The place

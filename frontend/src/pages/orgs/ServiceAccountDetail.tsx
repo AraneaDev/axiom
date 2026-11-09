@@ -23,7 +23,6 @@ import { agentApprovalsApi } from '@/api/agent-approvals.api';
 import {
   serviceAccountError,
   serviceAccountsApi,
-  type JoinablePlace,
   type ServiceAccountDetail as Detail,
 } from '@/api/service-accounts.api';
 import { spacePermissionsApi } from '@/api/space-permissions.api';
@@ -103,9 +102,8 @@ export default function ServiceAccountDetail() {
   // The owners being edited, or null: "Add an owner" on an orphan opens the same editor
   const [ownersDraft, setOwnersDraft] = useState<string[] | null>(null);
 
-  // A change answers without what the bot may join: keep that until the read comes back
   const onChanged = (next: Detail) => {
-    queryClient.setQueryData<Detail>(key, (old) => ({ ...next, joinable: old?.joinable }));
+    queryClient.setQueryData<Detail>(key, next);
     void queryClient.invalidateQueries({ queryKey: key });
     void queryClient.invalidateQueries({ queryKey: ['service-accounts'] });
   };
@@ -222,7 +220,7 @@ export default function ServiceAccountDetail() {
             onDraftChange={setOwnersDraft}
             onChanged={onChanged}
           />
-          <MembershipsCard bot={bot} orgSlug={slug} onAdded={reload} />
+          <MembershipsCard bot={bot} orgSlug={slug} canAdd={isAdmin} onAdded={reload} />
           <RequestsCard botId={bot.id} />
         </div>
       </div>
@@ -473,30 +471,30 @@ function OwnersCard({
 function MembershipsCard({
   bot,
   orgSlug,
+  canAdd,
   onAdded,
 }: {
   bot: Detail;
   orgSlug: string;
+  /** An org owner or admin, or a platform admin: the member and permission writes refuse most others */
+  canAdd: boolean;
   onAdded: () => void;
 }) {
   const [adding, setAdding] = useState<'team' | 'space' | null>(null);
-  const joinable = bot.joinable ?? { teams: [], spaces: [] };
   return (
     <Section
       title="Where it is"
       action={
-        <div className="flex gap-1">
-          {joinable.teams.length > 0 && (
+        canAdd && (
+          <div className="flex gap-1">
             <Button variant="ghost" size="xs" onClick={() => setAdding('team')}>
               <UserPlus className="h-3.5 w-3.5" /> Add to team
             </Button>
-          )}
-          {joinable.spaces.length > 0 && (
             <Button variant="ghost" size="xs" onClick={() => setAdding('space')}>
               <BookOpen className="h-3.5 w-3.5" /> Add to space
             </Button>
-          )}
-        </div>
+          </div>
+        )
       }
     >
       <p className="mb-3 text-xs text-text-tertiary">
@@ -531,7 +529,6 @@ function MembershipsCard({
         <AddPlaceModal
           kind={adding}
           bot={bot}
-          places={adding === 'team' ? joinable.teams : joinable.spaces}
           onClose={() => setAdding(null)}
           onAdded={() => {
             setAdding(null);
@@ -556,28 +553,36 @@ const PLACE_ROLES = {
 };
 
 /**
- * Add a bot to a team or space, through the same member and permission actions as a person.
+ * Add a bot to a team or space, through the same member and permission actions as a person. What
+ * it may join is read as the dialog opens: a read that costs a check per space of the org.
  * @param props - What is added where
  * @param props.kind - A team or a space
  * @param props.bot - The bot
- * @param props.places - The teams or spaces it may join
  * @param props.onClose - Close without adding
  * @param props.onAdded - Called once it is added
  */
 function AddPlaceModal({
   kind,
   bot,
-  places,
   onClose,
   onAdded,
 }: {
   kind: 'team' | 'space';
   bot: Detail;
-  places: JoinablePlace[];
   onClose: () => void;
   onAdded: () => void;
 }) {
-  const [placeId, setPlaceId] = useState(places[0]?.id ?? '');
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['service-account-joinable', bot.id],
+    queryFn: () => serviceAccountsApi.joinable(bot.id),
+  });
+  const places =
+    kind === 'team'
+      ? (data?.teams ?? []).map((t) => ({ value: t.id, label: t.name }))
+      : (data?.spaces ?? []).map((s) => ({ value: s.id, label: `${s.teamName} / ${s.name}` }));
+  const [picked, setPicked] = useState('');
+  const placeId = picked || places[0]?.value || '';
   const [role, setRole] = useState(PLACE_ROLES[kind][0].value);
   const add = useMutationWithToast(
     () =>
@@ -587,7 +592,14 @@ function AddPlaceModal({
     {
       successMessage: kind === 'team' ? 'Added to the team' : 'Added to the space',
       errorMessage: null,
-      onSuccess: onAdded,
+      onSuccess: () => {
+        // The team's members or the space's permissions show the bot from now on
+        void queryClient.invalidateQueries({
+          queryKey: [kind === 'team' ? 'team-members' : 'space-permissions', placeId],
+        });
+        void queryClient.invalidateQueries({ queryKey: ['service-account-joinable', bot.id] });
+        onAdded();
+      },
     },
   );
   return (
@@ -599,18 +611,32 @@ function AddPlaceModal({
           if (placeId) add.mutate();
         }}
       >
-        <Select
-          label={kind === 'team' ? 'Team' : 'Space'}
-          value={placeId}
-          onChange={(v) => setPlaceId(v as string)}
-          options={places.map((p) => ({ value: p.id, label: p.name }))}
-        />
-        <Select
-          label={kind === 'team' ? 'Role' : 'Access'}
-          value={role}
-          onChange={(v) => setRole(v as string)}
-          options={PLACE_ROLES[kind]}
-        />
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : error ? (
+          <ErrorAlert error={new Error(serviceAccountError(error))} fallback="" />
+        ) : places.length === 0 ? (
+          <p className="text-sm text-text-secondary">
+            {kind === 'team'
+              ? 'No team to add it to: it is in every team one of its owners is in.'
+              : 'No space to add it to. A space is offered when one of its owners can open it by a permission, and the bot cannot open it yet.'}
+          </p>
+        ) : (
+          <>
+            <Select
+              label={kind === 'team' ? 'Team' : 'Space'}
+              value={placeId}
+              onChange={(v) => setPicked(v as string)}
+              options={places}
+            />
+            <Select
+              label={kind === 'team' ? 'Role' : 'Access'}
+              value={role}
+              onChange={(v) => setRole(v as string)}
+              options={PLACE_ROLES[kind]}
+            />
+          </>
+        )}
         {add.error && <ErrorAlert error={new Error(serviceAccountError(add.error))} fallback="" />}
         <ModalFooter>
           <Button type="button" variant="secondary" size="sm" onClick={onClose}>

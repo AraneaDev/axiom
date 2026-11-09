@@ -834,6 +834,7 @@ Who may call them: an org owner or admin (a platform admin too) for everything; 
 | `POST /api/orgs/:orgId/service-accounts` | `serviceAccount.create` | Web UI only. `username`, `displayName`, `description` (500 characters at most), `ownerIds` (1 to 50). `201` |
 | `GET /api/orgs/:orgId/service-accounts` | `serviceAccount.list` | All of the org's bots for an org admin, the ones you own otherwise. Each with its owners, its `teams` and `lastUsedAt`, when one of its tokens last called the API |
 | `GET /api/service-accounts/:id` | `serviceAccount.get` | Status, owners, teams, spaces and tokens (never their hashes) |
+| `GET /api/service-accounts/:id/joinable` | `serviceAccount.joinable` | Where it may be added: `teams` of its org that one of its owners is in and it is not, and `spaces` (with `teamName`) that have permissions already, that it can't open yet and that one of its owners can open. Only places you can open yourself |
 | `GET /api/service-accounts/:id/activity` | `serviceAccount.activity` | Its latest 30 activities on issues and pages, newest first, with each one's `resourceTitle`, `resourceKey` and `resourceLink`; only what you can open yourself |
 | `PATCH /api/service-accounts/:id` | `serviceAccount.update` | Web UI only. `displayName`, `description` |
 | `PUT /api/service-accounts/:id/owners` | `serviceAccount.setOwners` | Web UI only. `ownerIds` replaces the owners; resumes an orphaned bot |

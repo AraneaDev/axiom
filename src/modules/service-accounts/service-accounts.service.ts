@@ -14,7 +14,12 @@ import { withResourceLinks } from '../teams/teams.service';
 import { generateApiToken } from '../users/users.service';
 import { canAccessSpace } from '../wiki/space-access';
 
-import { assertPlacesKept, lockEligibleOwners, lockServiceAccount } from './bot-guards';
+import {
+  assertPlacesKept,
+  lockEligibleOwners,
+  lockServiceAccount,
+  whoCanOpenNow,
+} from './bot-guards';
 import { eligibleOwnerIds, eligibleOwnerWhere } from './owners';
 
 /** Org roles that manage the org's bots */
@@ -381,10 +386,16 @@ export async function describeServiceAccount(id: string) {
 }
 
 /**
- * Where a bot may be added (decision 9): the teams of its org one of its owners is in, and the
- * spaces one of them can open, that it is not in yet. Spaces are only those the viewer can open
- * too, so no name reaches someone who can't see it. The member and permission actions still
- * decide; this only says what to offer.
+ * Where a bot may be added (decision 9): the teams of its org one of its owners is in and it is
+ * not, and the spaces it may safely be granted. A space is offered only when
+ * - it has permissions already: the bot's grant would otherwise be the first, which closes the
+ *   space to everyone without one;
+ * - the bot can't open it yet;
+ * - one of its owners can open it, by the rule the permission write checks (whoCanOpen). With
+ *   permissions in place, the bot's own grant changes no one else's access, so that holds after
+ *   the write too;
+ * - the viewer can open it, so no name reaches someone who can't see it.
+ * The member and permission actions still decide; this only says what to offer.
  * @param id - The bot's user id
  * @param viewerId - Who reads
  */
@@ -406,22 +417,25 @@ export async function joinablePlaces(id: string, viewerId: string) {
       where: {
         team: { orgId: account.orgId },
         isArchived: false,
-        permissions: { none: { userId: id } },
+        permissions: { some: {}, none: { userId: id } },
       },
-      select: { id: true, name: true, slug: true },
-      orderBy: { name: 'asc' },
+      select: { id: true, name: true, slug: true, team: { select: { name: true } } },
+      orderBy: [{ team: { name: 'asc' } }, { name: 'asc' }],
     }),
   ]);
-  const open = await Promise.all(
+  const offered = await Promise.all(
     spaces.map(async (space) => {
       if (!(await canAccessSpace(space.id, viewerId, 'VIEW'))) return false;
-      for (const owner of owners) {
-        if (await canAccessSpace(space.id, owner, 'VIEW')) return true;
-      }
-      return false;
+      if (await canAccessSpace(space.id, id, 'VIEW')) return false;
+      return (await whoCanOpenNow({ spaceId: space.id }, owners)).length > 0;
     }),
   );
-  return { teams, spaces: spaces.filter((_, i) => open[i]) };
+  return {
+    teams,
+    spaces: spaces
+      .filter((_, i) => offered[i])
+      .map(({ team, ...space }) => ({ ...space, teamName: team.name })),
+  };
 }
 
 /**
