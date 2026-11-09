@@ -11,6 +11,7 @@ import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { entryColumnIds } from '../issues/issue-references';
 import { createNotification } from '../notifications/notifications.service';
+import { isServiceAccount } from '../service-accounts/person';
 
 import type { updateGateSchema, createGateSchema, castVoteSchema } from './approvals.validation';
 
@@ -274,6 +275,17 @@ export async function createApprovalRequestWithTarget(
 
   if (existingRequest) {
     throw new AppError(409, 'A pending approval request already exists for this issue');
+  }
+
+  // A bot is never named to decide: said as such, before any rule that counts approvers
+  for (const approverId of new Set(approverIds)) {
+    if (await isServiceAccount(approverId)) {
+      throw new AppError(
+        400,
+        'A service account cannot be an approver',
+        'SERVICE_ACCOUNT_NOT_APPROVER',
+      );
+    }
   }
 
   // Validate self-approval rule. A bot's owners count as the bot (decision 12)

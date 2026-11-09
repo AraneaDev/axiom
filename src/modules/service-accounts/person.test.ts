@@ -260,7 +260,11 @@ describe('a SERVICE user is never a person', () => {
     try {
       await expect(
         createApprovalRequestWithTarget(issueId, to.id, ctx.owner.id, [botId]),
-      ).rejects.toMatchObject({ statusCode: 400 });
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'SERVICE_ACCOUNT_NOT_APPROVER',
+        message: 'A service account cannot be an approver',
+      });
       expect(await prisma.approvalRequest.count({ where: { issueId } })).toBe(0);
       // A person on the team still can be named
       await expect(
@@ -274,8 +278,19 @@ describe('a SERVICE user is never a person', () => {
 
   it('refuses a bot as the value of a USER custom field (M2)', async () => {
     const field = { type: 'USER', projectId: ctx.projectId };
-    await expect(assertCustomFieldValue(field, botId)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(assertCustomFieldValue(field, botId)).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'SERVICE_ACCOUNT_NOT_ASSIGNABLE',
+    });
     await expect(assertCustomFieldValue(field, member.id)).resolves.toBeUndefined();
+  });
+
+  it('gives an unknown user id in a USER custom field the usual access message', async () => {
+    const field = { type: 'USER', projectId: ctx.projectId };
+    await expect(assertCustomFieldValue(field, 'voorbeeld-no-such-user')).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'A user field can only name someone who can read this project',
+    });
   });
 
   it('leaves the bot out of team and org member counts (M3)', async () => {

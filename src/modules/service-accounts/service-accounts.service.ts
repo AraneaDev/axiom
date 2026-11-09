@@ -375,7 +375,8 @@ export async function setOwners(id: string, ownerIds: string[]) {
 
 /**
  * Suspend a bot by hand: its tokens stop working at once and its waiting requests are cancelled.
- * A bot already suspended stays as it is, an orphan stays an orphan.
+ * An orphan suspended by hand becomes MANUAL, keeping when it was suspended: a new owner then
+ * does not lift it, only resume does. A bot already suspended by hand stays as it is.
  * @param id - The bot's user id
  * @throws {AppError} 404 when there is no such bot
  */
@@ -383,6 +384,14 @@ export async function suspendServiceAccount(id: string) {
   await prisma.$transaction(async (tx) => {
     const account = await lockServiceAccount(tx, id);
     if (!account) throw NOT_FOUND();
+    if (account.suspendedReason === 'ORPHANED') {
+      // Its requests were cancelled when it was orphaned
+      await tx.serviceAccount.update({
+        where: { userId: id },
+        data: { suspendedReason: 'MANUAL' },
+      });
+      return;
+    }
     if (account.status === 'SUSPENDED') return;
     await tx.serviceAccount.update({
       where: { userId: id },
@@ -394,9 +403,12 @@ export async function suspendServiceAccount(id: string) {
 }
 
 /**
- * Resume a bot suspended by hand. An orphan resumes only by getting an owner (setOwners).
+ * Resume a bot suspended by hand. An orphan resumes only by getting an owner (setOwners). Each of
+ * its places needs an owner who can open it: a hook that failed while it was suspended may have
+ * left it in one, and the sweep skips suspended bots.
  * @param id - The bot's user id
- * @throws {AppError} 404 when there is no such bot, 400 SERVICE_ACCOUNT_ORPHANED for an orphan
+ * @throws {AppError} 404 when there is no such bot, 400 SERVICE_ACCOUNT_ORPHANED for an orphan,
+ * 400 SERVICE_ACCOUNT_OWNER_NEEDED for a place none of its owners can open
  */
 export async function resumeServiceAccount(id: string) {
   await prisma.$transaction(async (tx) => {
@@ -421,6 +433,7 @@ export async function resumeServiceAccount(id: string) {
       );
     }
     if (account.status === 'ACTIVE') return;
+    await assertPlacesKept(tx, id, owners);
     await tx.serviceAccount.update({
       where: { userId: id },
       data: { status: 'ACTIVE', suspendedReason: null, suspendedAt: null },
@@ -578,11 +591,16 @@ export async function createBotToken(
   if (!Number.isInteger(days) || days < 1 || days > BOT_TOKEN_MAX_DAYS) {
     throw new AppError(400, `A service account token expires in 1 to ${BOT_TOKEN_MAX_DAYS} days`);
   }
-  await assertActive(prisma, botId);
-  return storeBotToken(prisma, botId, {
-    name: data.name,
-    scopes: [...new Set(data.scopes)],
-    expiresAt: new Date(Date.now() + days * DAY_MS),
+  // Read under the bot row lock, in the transaction that writes: a suspension commits first and
+  // refuses this, or waits until the token exists and then stops it with the rest
+  return prisma.$transaction(async (tx) => {
+    await lockServiceAccount(tx, botId);
+    await assertActive(tx, botId);
+    return storeBotToken(tx, botId, {
+      name: data.name,
+      scopes: [...new Set(data.scopes)],
+      expiresAt: new Date(Date.now() + days * DAY_MS),
+    });
   });
 }
 

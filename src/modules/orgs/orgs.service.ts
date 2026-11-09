@@ -154,6 +154,8 @@ export async function deleteOrg(orgId: string) {
   const botIds = bots.map((b) => b.userId);
   const now = new Date();
   await prisma.$transaction([
+    // The bot rows first, as every bot check takes them: the cascade writes them last
+    prisma.$queryRaw`SELECT "userId" FROM service_accounts WHERE "orgId" = ${orgId} ORDER BY "userId" FOR UPDATE`,
     // As deleting one bot does: its waiting requests are cancelled, not left to expire
     prisma.agentApproval.updateMany(
       cancelPendingArgs(botIds, 'The organization of this service account was deleted'),

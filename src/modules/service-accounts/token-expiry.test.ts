@@ -4,7 +4,7 @@
  */
 import crypto from 'crypto';
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import {
@@ -15,6 +15,7 @@ import {
   type TestUser,
 } from '../../test/factory';
 import { authPost } from '../../test/helpers';
+import { logger } from '../../utils/logger';
 
 import { sweepServiceAccounts } from './bot-guards';
 import { notifyExpiringBotTokens } from './token-expiry.job';
@@ -143,6 +144,31 @@ describe('service accounts: the worker job', () => {
       await notifyExpiringBotTokens();
       expect(await notices(owner.id)).toBe(0);
     });
+
+    it("M4: an orphan's token is not claimed until it has an owner to tell", async () => {
+      const owner = await person();
+      const id = await bot([owner.id]);
+      const tokenId = await tokenExpiringIn(id, 13);
+      // Its only owner can't own it now: nobody to tell
+      await prisma.orgMembership.update({
+        where: { userId_orgId: { userId: owner.id, orgId: ctx.orgId } },
+        data: { role: 'VIEWER' },
+      });
+      await notifyExpiringBotTokens();
+      expect(await notices(owner.id)).toBe(0);
+      let token = await prisma.apiToken.findUniqueOrThrow({ where: { id: tokenId } });
+      expect(token.expiryNotifiedAt).toBeNull();
+
+      // An owner again: the next run tells them
+      await prisma.orgMembership.update({
+        where: { userId_orgId: { userId: owner.id, orgId: ctx.orgId } },
+        data: { role: 'MEMBER' },
+      });
+      await notifyExpiringBotTokens();
+      expect(await notices(owner.id)).toBe(1);
+      token = await prisma.apiToken.findUniqueOrThrow({ where: { id: tokenId } });
+      expect(token.expiryNotifiedAt).not.toBeNull();
+    });
   });
 
   describe('the hourly sweep', () => {
@@ -191,6 +217,36 @@ describe('service accounts: the worker job', () => {
       const account = await prisma.serviceAccount.findUniqueOrThrow({ where: { userId: id } });
       expect(account.status).toBe('ACTIVE');
       expect(await prisma.serviceAccountOwner.count({ where: { serviceAccountId: id } })).toBe(1);
+    });
+
+    it('M5: each check gets 30 seconds, and the sweep logs how many bots it left', async () => {
+      const owner = await person();
+      await bot([owner.id]);
+      const transaction = prisma.$transaction.bind(prisma) as (...args: unknown[]) => unknown;
+      const options: unknown[] = [];
+      let calls = 0;
+      // The first bot's check fails; every other runs as usual
+      const spy = vi.spyOn(prisma, '$transaction').mockImplementation(((...args: unknown[]) => {
+        options.push(args[1]);
+        if (calls++ === 0) return Promise.reject(new Error('forced sweep failure'));
+        return transaction(...args);
+      }) as never);
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      try {
+        const checked = await sweepServiceAccounts();
+        expect(checked).toBeGreaterThan(0);
+        expect(options.length).toBe(checked);
+        for (const opts of options) expect(opts).toEqual({ timeout: 30_000 });
+        expect(warn).toHaveBeenCalledWith('the service account sweep left bots unrepaired', {
+          checked,
+          failed: 1,
+        });
+      } finally {
+        spy.mockRestore();
+        error.mockRestore();
+        warn.mockRestore();
+      }
     });
   });
 });

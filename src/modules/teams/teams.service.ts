@@ -169,7 +169,18 @@ export async function updateTeam(teamId: string, data: { name?: string; descript
  */
 export async function deleteTeam(teamId: string) {
   await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), ERR.TEAM_NOT_FOUND);
-  await prisma.team.delete({ where: { id: teamId } });
+  // The rows of the bots in the team or its spaces first, as every bot check takes them: the
+  // cascade removes their memberships and permissions, which a check that leaves them writes too.
+  // A batch, not an interactive transaction: the cascade may outlast its timeout
+  await prisma.$transaction([
+    prisma.$queryRaw`SELECT "userId" FROM service_accounts WHERE "userId" IN (
+        SELECT "userId" FROM team_memberships WHERE "teamId" = ${teamId}
+        UNION
+        SELECT p."userId" FROM space_permissions p JOIN wiki_spaces s ON s.id = p."spaceId"
+        WHERE s."teamId" = ${teamId} AND p."userId" IS NOT NULL
+      ) ORDER BY "userId" FOR UPDATE`,
+    prisma.team.delete({ where: { id: teamId } }),
+  ]);
 }
 
 /**

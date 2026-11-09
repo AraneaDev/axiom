@@ -229,7 +229,11 @@ export async function updateUser(userId: string, data: { role?: string; disabled
   if (data.role) {
     const role = data.role as 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST';
     await prisma.$transaction(async (tx) => {
-      const memberships = await tx.orgMembership.findMany({ where: { userId } });
+      // Org by org in id order: two role changes never take two orgs' OWNER rows crosswise
+      const memberships = await tx.orgMembership.findMany({
+        where: { userId },
+        orderBy: { orgId: 'asc' },
+      });
       for (const m of memberships) {
         if (m.role !== 'OWNER' || role === 'OWNER') continue;
         await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' ORDER BY "userId" FOR UPDATE`;
@@ -263,7 +267,10 @@ export async function deleteUser(userId: string) {
 
   // Deleting the last OWNER of an org would leave it unmanageable: transfer ownership first
   const guardLastOwner = async (tx: Prisma.TransactionClient) => {
-    const owned = await tx.orgMembership.findMany({ where: { userId, role: 'OWNER' } });
+    const owned = await tx.orgMembership.findMany({
+      where: { userId, role: 'OWNER' },
+      orderBy: { orgId: 'asc' },
+    });
     for (const m of owned) {
       await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' ORDER BY "userId" FOR UPDATE`;
       await assertNotLastOwnerTx(tx, m.orgId);
@@ -283,6 +290,12 @@ export async function deleteUser(userId: string) {
   // delete has happened: orphans are suspended, the others leave the places only this user was in
   const ownedBots = await botIdsOwnedBy(userId);
   await prisma.$transaction(async (tx) => {
+    // The cascade writes the rows of the bots they made (createdById) and owned: those rows come
+    // first, as in every bot check, so no check holds one while waiting on this user's rows
+    await tx.$queryRaw`SELECT "userId" FROM service_accounts
+      WHERE "createdById" = ${userId}
+        OR "userId" IN (SELECT "serviceAccountId" FROM service_account_owners WHERE "ownerId" = ${userId})
+      ORDER BY "userId" FOR UPDATE`;
     await guardLastOwner(tx);
     // Their org rows before the cascade takes their team rows: the order every bot check uses
     await tx.$queryRaw`SELECT id FROM org_memberships WHERE "userId" = ${userId} ORDER BY id FOR UPDATE`;

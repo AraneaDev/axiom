@@ -13,11 +13,13 @@ import { canAccessSpace } from '../wiki/space-access';
  * a team the bot is a member of, every wiki space the bot can view (by its own permission or
  * through a team-role grant of one of its teams), and every page whose restrictions list it.
  *
- * Locking: every check here runs in a transaction that first locks the bot's service account row
- * (FOR UPDATE), then the rows it reads about the owners (FOR SHARE: their org memberships, team
- * memberships and space permissions). A path that removes a person locks that person's own org
- * membership first as well (removeOrgMember, deleteUser), so it never holds a team row while
- * waiting for an org row a check holds. A leave, removal or demotion either commits before the
+ * Locking, one order everywhere: the bot's service account row (FOR UPDATE), then the org's
+ * OWNER membership rows by userId, then the other org membership rows by userId, then team
+ * memberships and space permissions (FOR SHARE where a check only reads them). A path that removes
+ * a person takes the OWNER rows and then that person's own org row (removeOrgMember, deleteUser),
+ * so it never holds a team row while waiting for an org row a check holds. A path that writes a
+ * bot row through a cascade (deleteUser through createdById, deleteTeam, deleteOrg) takes the bot
+ * rows first. A leave, removal or demotion either commits before the
  * check reads, or waits for it and is repaired by the hook that runs after it commits. Hooks
  * catch and log their errors: the change they follow stands, and the hourly sweep repairs what
  * a failed hook left.
@@ -34,6 +36,9 @@ const OWNER_ROLES = ['OWNER', 'ADMIN', 'MEMBER'];
 
 /** Org roles below which ownership lapses */
 const LAPSING_ROLES = ['VIEWER', 'GUEST'];
+
+/** How long one bot's check may take */
+const CHECK_TIMEOUT_MS = 30_000;
 
 /** How many rounds a check repairs in: leaving a space can mean leaving its team, nothing more */
 const MAX_REPAIR_ROUNDS = 3;
@@ -445,50 +450,55 @@ async function leave(tx: Tx, botId: string, p: BotPlace): Promise<BotPlace[]> {
  * @param drop - Owner rows to remove first: one whose ownership lapsed, or every lapsed one
  */
 async function reconcile(botId: string, scope: Scope, drop?: Drop): Promise<void> {
-  const outcome = await prisma.$transaction(async (tx): Promise<Outcome | null> => {
-    const account = await lockServiceAccount(tx, botId);
-    if (!account) return null;
-    // A delete's cascade already took the owner row: it was lost all the same
-    let lostOwner = drop === 'cascaded';
-    if (drop && typeof drop === 'object') {
-      const gone = await tx.serviceAccountOwner.deleteMany({
-        where: { serviceAccountId: botId, ownerId: drop.ownerId },
-      });
-      lostOwner = gone.count > 0;
-    }
-    const rowIds = await ownerRowIds(tx, botId);
-    const owners = await lockEligibleOwners(tx, account.orgId, rowIds);
-    if (drop === 'lapsed') {
-      const lapsed = rowIds.filter((id) => !owners.includes(id));
-      if (lapsed.length > 0) {
-        await tx.serviceAccountOwner.deleteMany({
-          where: { serviceAccountId: botId, ownerId: { in: lapsed } },
+  const outcome = await prisma.$transaction(
+    async (tx): Promise<Outcome | null> => {
+      const account = await lockServiceAccount(tx, botId);
+      if (!account) return null;
+      // A delete's cascade already took the owner row: it was lost all the same
+      let lostOwner = drop === 'cascaded';
+      if (drop && typeof drop === 'object') {
+        const gone = await tx.serviceAccountOwner.deleteMany({
+          where: { serviceAccountId: botId, ownerId: drop.ownerId },
         });
-        lostOwner = true;
+        lostOwner = gone.count > 0;
       }
-    }
-    const outcome: Outcome = {
-      botId,
-      orgId: account.orgId,
-      owners,
-      removed: [],
-      ownerChange: null,
-    };
-    // A bot with no owner keeps its places, suspended, until an owner who is there comes back
-    if (owners.length === 0) {
-      outcome.ownerChange = await orphan(tx, account, lostOwner);
+      const rowIds = await ownerRowIds(tx, botId);
+      const owners = await lockEligibleOwners(tx, account.orgId, rowIds);
+      if (drop === 'lapsed') {
+        const lapsed = rowIds.filter((id) => !owners.includes(id));
+        if (lapsed.length > 0) {
+          await tx.serviceAccountOwner.deleteMany({
+            where: { serviceAccountId: botId, ownerId: { in: lapsed } },
+          });
+          lostOwner = true;
+        }
+      }
+      const outcome: Outcome = {
+        botId,
+        orgId: account.orgId,
+        owners,
+        removed: [],
+        ownerChange: null,
+      };
+      // A bot with no owner keeps its places, suspended, until an owner who is there comes back
+      if (owners.length === 0) {
+        outcome.ownerChange = await orphan(tx, account, lostOwner);
+        return outcome;
+      }
+      for (let round = 0; round < MAX_REPAIR_ROUNDS; round++) {
+        const missing: BotPlace[] = [];
+        for (const p of await placesOf(tx, botId, scope)) {
+          if (!(await ownerPresent(tx, p.place, owners))) missing.push(p);
+        }
+        if (missing.length === 0) break;
+        for (const p of missing) outcome.removed.push(...(await leave(tx, botId, p)));
+      }
       return outcome;
-    }
-    for (let round = 0; round < MAX_REPAIR_ROUNDS; round++) {
-      const missing: BotPlace[] = [];
-      for (const p of await placesOf(tx, botId, scope)) {
-        if (!(await ownerPresent(tx, p.place, owners))) missing.push(p);
-      }
-      if (missing.length === 0) break;
-      for (const p of missing) outcome.removed.push(...(await leave(tx, botId, p)));
-    }
-    return outcome;
-  });
+    },
+    // A bot in many places with several owners takes many reads: past Prisma's default 5 s the
+    // check would fail for that bot every hour
+    { timeout: CHECK_TIMEOUT_MS },
+  );
   if (!outcome) return;
   if (outcome.removed.length > 0) void revokeLiveAccess({ userId: botId });
   await tell(outcome);
@@ -550,12 +560,15 @@ async function tell(outcome: Outcome): Promise<void> {
  * and the sweep repairs what is left.
  * @param what - What is checked, for the log
  * @param work - The work
+ * @returns Whether it ran without failing
  */
-async function safely(what: string, work: () => Promise<void>): Promise<void> {
+async function safely(what: string, work: () => Promise<void>): Promise<boolean> {
   try {
     await work();
+    return true;
   } catch (err) {
     logger.error('a service account check failed; the sweep repairs it', { what }, err as Error);
+    return false;
   }
 }
 
@@ -565,7 +578,7 @@ async function safely(what: string, work: () => Promise<void>): Promise<void> {
  * @param scope - Which places
  * @param drop - Owner rows to remove first
  */
-function recheck(botId: string, scope: Scope, drop?: Drop): Promise<void> {
+function recheck(botId: string, scope: Scope, drop?: Drop): Promise<boolean> {
   return safely(`bot ${botId}`, () => reconcile(botId, scope, drop));
 }
 
@@ -733,7 +746,8 @@ export async function recheckBots(
  * The hourly backstop for the hooks above, which log and move on when they fail: every active
  * bot drops the owner rows of people who can no longer own it, leaves each team, space and page
  * none of its owners can open, and is suspended as ORPHANED when no owner is left. The same
- * check the hooks run, over every place; one bot's failure is logged and the next is checked.
+ * check the hooks run, over every place; one bot's failure is logged and the next is checked,
+ * and the count of failures is logged at the end.
  * @returns How many bots were checked
  */
 export async function sweepServiceAccounts(): Promise<number> {
@@ -742,6 +756,15 @@ export async function sweepServiceAccounts(): Promise<number> {
     select: { userId: true },
     orderBy: { userId: 'asc' },
   });
-  for (const { userId } of bots) await recheck(userId, 'all', 'lapsed');
+  let failed = 0;
+  for (const { userId } of bots) {
+    if (!(await recheck(userId, 'all', 'lapsed'))) failed++;
+  }
+  if (failed > 0) {
+    logger.warn('the service account sweep left bots unrepaired', {
+      checked: bots.length,
+      failed,
+    });
+  }
   return bots.length;
 }

@@ -19,13 +19,14 @@ export async function assertCustomFieldValue(
   value: string,
 ): Promise<void> {
   if (definition.type !== 'USER' || value === '') return;
+  // Access first: an unknown id, like anyone who can't read the project, gets the same message
+  if ((await checkProjectAccess(value, definition.projectId)) !== 'ok') {
+    throw new AppError(400, 'A user field can only name someone who can read this project');
+  }
   // A USER field is an assignment in all but name: only people
   await assertPersonTarget(
     value,
     'SERVICE_ACCOUNT_NOT_ASSIGNABLE',
     'A user field can only name a person',
   );
-  if ((await checkProjectAccess(value, definition.projectId)) !== 'ok') {
-    throw new AppError(400, 'A user field can only name someone who can read this project');
-  }
 }
