@@ -390,6 +390,12 @@ describe('admin reach', () => {
       const agent = await tokenOf(member.id, ['admin:write']);
       const res = await asToken(agent.raw, method, path(), body);
       expect(res.status).toBe(403);
+      // The refusal of the role check itself, not the CSRF guard's
+      expect(res.body.error).toEqual(
+        _role === 'space ADMIN'
+          ? { message: 'You do not have access to this space' }
+          : { message: `Insufficient permissions: ${_role}`, code: 'FORBIDDEN' },
+      );
       expect(await prisma.agentApproval.count({ where: { userId: member.id } })).toBe(0);
     });
 
@@ -443,7 +449,7 @@ describe('admin reach', () => {
         { newPassword: 'a-new-password-1' },
       );
       expect(res.status).toBe(403);
-      expect(res.body.error.code).toBe('SCOPE');
+      expect(res.body.error.code).toBe('UI_ONLY');
 
       const viaAct = await request(app)
         .post('/api/act')
@@ -454,6 +460,7 @@ describe('admin reach', () => {
           input: { userId: member.id, newPassword: 'a-new-password-1' },
         });
       expect(viaAct.status).toBe(403);
+      expect(viaAct.body.error.code).toBe('UI_ONLY');
       expect(await prisma.agentApproval.count({ where: { userId: platformAdmin.id } })).toBe(0);
       expect(getAction('adminUser.resetPassword')?.uiOnly).toBe(true);
     });
@@ -472,12 +479,13 @@ describe('admin reach', () => {
       const agent = await tokenOf(ctx.owner.id, ['orgs:read', 'admin:write']);
       const res = await asToken(agent.raw, 'get', `/api/orgs/${ctx.orgId}/invites`);
       expect(res.status).toBe(403);
-      expect(res.body.error.code).toBe('SCOPE');
+      expect(res.body.error.code).toBe('TOKEN_BLOCKED');
     });
 
     it('refuses a token deleting its own account through the admin route', async () => {
       const res = await asToken(adminAgent.raw, 'delete', `/api/admin/users/${platformAdmin.id}`);
       expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('FORBIDDEN');
       expect(await prisma.agentApproval.count({ where: { userId: platformAdmin.id } })).toBe(0);
     });
   });
@@ -555,6 +563,7 @@ describe('admin reach', () => {
       const done = await approve(ctx.owner, asked.body.approvalId);
       expect(done.body.status).toBe('FAILED');
       expect(done.body.error.status).toBe(403);
+      expect(done.body.error.code).toBe('SCOPE');
       expect(await prisma.apiToken.count({ where: { name: 'Narrowed' } })).toBe(0);
     });
 
@@ -998,7 +1007,8 @@ describe('admin reach', () => {
       const path = `/api/admin/users/${member.id}/reset-password`;
       const body = { newPassword: 'a-new-password-1' };
       expect((await authPost(path, ctx.owner.token, body)).status).toBe(403);
-      expect((await asToken(adminAgent.raw, 'post', path, body)).status).toBe(403);
+      const viaToken = await asToken(adminAgent.raw, 'post', path, body);
+      expect([viaToken.status, viaToken.body.error.code]).toEqual([403, 'UI_ONLY']);
     });
   });
 

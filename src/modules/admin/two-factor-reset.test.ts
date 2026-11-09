@@ -186,6 +186,7 @@ describe('an admin resets a user 2FA', () => {
       .set(CSRF)
       .set('Authorization', `Token ${raw}`);
     expect(viaRest.status).toBe(403);
+    expect(viaRest.body.error.code).toBe('UI_ONLY');
 
     const viaAct = await request(app)
       .post('/api/act')
@@ -193,6 +194,7 @@ describe('an admin resets a user 2FA', () => {
       .set('Authorization', `Token ${raw}`)
       .send({ action: 'adminUser.resetTwoFactor', input: { userId: locked.id } });
     expect(viaAct.status).toBe(403);
+    expect(viaAct.body.error.code).toBe('UI_ONLY');
 
     expect(await prisma.agentApproval.count({ where: { userId: platformAdmin.id } })).toBe(0);
     expect(await stored()).toEqual({

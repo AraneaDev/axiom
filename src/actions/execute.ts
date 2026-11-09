@@ -15,6 +15,23 @@ function scopeRefusal(): AppError {
   return new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
 }
 
+/** The refusal of an action only the web UI runs, to a token or a call by name. */
+function uiOnlyRefusal(): AppError {
+  return new AppError(
+    403,
+    'This action is only available in the web UI, not to API tokens or by name',
+    'UI_ONLY',
+  );
+}
+
+/** The refusal of an action a session runs but no API token does, whatever its scopes. */
+function tokenBlockedRefusal(): AppError {
+  return new AppError(403, 'API tokens may not run this action', 'TOKEN_BLOCKED');
+}
+
+/** The codes of the refusals a token gets before its input is read. */
+export const TOKEN_REFUSAL_CODES = ['SCOPE', 'UI_ONLY', 'TOKEN_BLOCKED'] as const;
+
 /**
  * In tests, fail on a handler whose result no longer fits its output schema.
  * @param def - The action
@@ -50,8 +67,8 @@ export function scopesCoverAction(scopes: readonly string[], def: ActionDef): bo
  */
 export function actionRefusal(def: ActionDef, ctx: ActionContext): AppError | undefined {
   const token = isToken(ctx);
-  if ((token || ctx.byName) && def.uiOnly) return scopeRefusal();
-  if (token && def.tokenBlocked) return scopeRefusal();
+  if ((token || ctx.byName) && def.uiOnly) return uiOnlyRefusal();
+  if (token && def.tokenBlocked) return tokenBlockedRefusal();
   if (def.rest?.raw && !ctx.http) {
     const alternative = def.rawAlternative ? ` ${def.rawAlternative}` : '';
     return new AppError(
@@ -68,7 +85,7 @@ export function actionRefusal(def: ActionDef, ctx: ActionContext): AppError | un
  * The action with this name, if this caller can run it.
  * @param name - The action's dotted name
  * @param ctx - Who runs it and through what
- * @throws {AppError} 404 UNKNOWN_ACTION, 403 SCOPE, 400 RAW_ACTION
+ * @throws {AppError} 404 UNKNOWN_ACTION, 403 UI_ONLY, TOKEN_BLOCKED or SCOPE, 400 RAW_ACTION
  */
 export function assertRunnable(name: string, ctx: ActionContext): ActionDef {
   const def = getAction(name);
@@ -103,8 +120,8 @@ function fullInputSchema(def: ActionDef, ctx: ActionContext): ActionDef['input']
  * @param bodyError - Set by an adapter whose request body is unusable (missing, an array): the
  * action answers 400 with it once authorize has passed, as a controller validating its body did
  * @returns What the handler returned, unchanged, or a PendingApproval when the call waits for one
- * @throws {AppError} 404 UNKNOWN_ACTION, 403 SCOPE, 400 RAW_ACTION, 400 on invalid input, and
- * whatever authorize or the handler throw
+ * @throws {AppError} 404 UNKNOWN_ACTION, 403 UI_ONLY, TOKEN_BLOCKED or SCOPE, 400 RAW_ACTION, 400
+ * on invalid input, and whatever authorize or the handler throw
  */
 export async function executeAction(
   name: string,

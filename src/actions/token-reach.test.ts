@@ -1,9 +1,9 @@
 /**
  * The registry alone decides what a token reaches. Every registered action, by name, and every
  * REST binding is called with a token of each scope that covers it, and with one token holding
- * every scope that does not: the answer is the SCOPE refusal exactly where the action's own checks
- * give it, and every REST call reaches the action, so nothing in front of it (a path rule, a
- * router) answers for it. Scopes only add reach, so the token of all the others stands for each
+ * every scope that does not: the answer is a token refusal (SCOPE, UI_ONLY or TOKEN_BLOCKED)
+ * exactly where the action's own checks give it, and every REST call reaches the action, so
+ * nothing in front of it (a path rule, a router) answers for it. Scopes only add reach, so the token of all the others stands for each
  * of them alone, and for none.
  */
 import crypto from 'crypto';
@@ -55,6 +55,15 @@ async function mintToken(userId: string, scopes: string[]): Promise<string> {
 }
 
 /**
+ * Whether a code is one of the refusals a token gets before its input is read: no scope, an
+ * action only the web UI runs, or one no token runs.
+ * @param code - The error code
+ */
+function isTokenRefusal(code: string | undefined): boolean {
+  return (execute.TOKEN_REFUSAL_CODES as readonly (string | undefined)[]).includes(code);
+}
+
+/**
  * Whether the action's own checks refuse this token its scope.
  * @param def - The action
  * @param scopes - The token's scopes
@@ -68,7 +77,7 @@ function registryRefuses(def: ActionDef, scopes: string[], byName: boolean): boo
     channel: 'rest-token',
     ...(byName ? { byName: {} } : { http: {} as NonNullable<ActionContext['http']> }),
   };
-  return execute.actionRefusal(def, ctx)?.code === 'SCOPE';
+  return isTokenRefusal(execute.actionRefusal(def, ctx)?.code);
 }
 
 /**
@@ -131,7 +140,7 @@ describe('the registry alone decides what a token reaches', () => {
           wrong.push(`${label}: answered ${answer(res)} before the action ran`);
           continue;
         }
-        const refused = res.status === 403 && res.body?.error?.code === 'SCOPE';
+        const refused = res.status === 403 && isTokenRefusal(res.body?.error?.code);
         if (registryRefuses(def, scopes, false) !== refused) {
           wrong.push(`${label}: the action refuses ${!refused}, the request got ${answer(res)}`);
         }
@@ -168,7 +177,7 @@ describe('the registry alone decides what a token reaches', () => {
           .set(CSRF)
           .set('Authorization', tokens.get(key)!)
           .send({ action: def.name, input: {} });
-        const refused = res.status === 403 && res.body?.error?.code === 'SCOPE';
+        const refused = res.status === 403 && isTokenRefusal(res.body?.error?.code);
         if (registryRefuses(def, scopes, true) !== refused) {
           wrong.push(
             `${def.name} by name with [${key}]: the action refuses ${!refused}, ` +

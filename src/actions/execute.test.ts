@@ -296,7 +296,7 @@ describe('executeAction', () => {
         },
       );
       expect(err.statusCode).toBe(403);
-      expect(err.code).toBe('SCOPE');
+      expect(err.code).toBe('UI_ONLY');
     }
     expect(uiOnlyHandler).not.toHaveBeenCalled();
 
@@ -318,7 +318,7 @@ describe('executeAction', () => {
         },
       );
       expect(err.statusCode).toBe(403);
-      expect(err.code).toBe('SCOPE');
+      expect(err.code).toBe('TOKEN_BLOCKED');
     }
     expect(tokenBlockedHandler).not.toHaveBeenCalled();
 
@@ -366,7 +366,7 @@ describe('executeAction', () => {
 
   it('refuses a uiOnly raw action to a token as uiOnly, not as raw', async () => {
     const err = await refusal('test.uiOnlyRaw', {}, wikiTokenOverMcp);
-    expect(err.code).toBe('SCOPE');
+    expect(err.code).toBe('UI_ONLY');
   });
 
   it('gives authorize only the target and the handler the full input', async () => {
@@ -742,7 +742,7 @@ describe('authorizers', () => {
         const noRole = await refusal('test.projectBody', input, asUser(viewer, channel));
         expect([noRole.statusCode, noRole.code]).toEqual([403, 'FORBIDDEN']);
         const noOrg = await refusal('test.projectBody', input, asUser(stranger, channel));
-        expect(noOrg.statusCode).toBe(403);
+        expect([noOrg.statusCode, noOrg.code]).toEqual([403, 'FORBIDDEN']);
 
         const missing = await refusal(
           'test.projectBody',

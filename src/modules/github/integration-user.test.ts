@@ -95,8 +95,10 @@ describe('GitHub integration user', () => {
     try {
       const res2 = await request(app)
         .get('/api/users/search?q=x')
+        .set(XHR)
         .set('Authorization', `Token ${plantedToken}`);
       expect(res2.status).toBe(401);
+      expect(res2.body.error.code).toBe('INVALID_TOKEN');
     } finally {
       await prisma.apiToken.deleteMany({ where: { userId: GITHUB_INTEGRATION_USER_ID } });
     }

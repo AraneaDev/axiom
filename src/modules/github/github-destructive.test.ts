@@ -309,6 +309,7 @@ describe('githubPr.merge', () => {
     const done = await approve(pending.body.approvalId);
     expect(done.body.status).toBe('FAILED');
     expect(done.body.error.status).toBe(403);
+    expect(done.body.error.code).toBe('FORBIDDEN');
     expect(fake.requests).toEqual([]);
   });
 

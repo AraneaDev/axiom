@@ -678,10 +678,10 @@ describe('service accounts: approvals for bots', () => {
 
     const byBot = await withToken('post', `/api/agent-approvals/${id}/approve`, bot2Token);
     expect(byBot.status).toBe(403);
-    expect(byBot.body.error.code).toBe('SCOPE');
+    expect(byBot.body.error.code).toBe('UI_ONLY');
     const byBotReject = await withToken('post', `/api/agent-approvals/${id}/reject`, bot2Token);
     expect(byBotReject.status).toBe(403);
-    expect(byBotReject.body.error.code).toBe('SCOPE');
+    expect(byBotReject.body.error.code).toBe('UI_ONLY');
     const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
     expect(row.status).toBe('PENDING');
     expect(runs).toEqual([]);

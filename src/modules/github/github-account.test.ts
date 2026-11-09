@@ -212,7 +212,7 @@ describe('connecting a GitHub account', () => {
     expect(await prisma.githubAccount.count()).toBe(0);
   });
 
-  it('is web UI only: a token holding github:write is refused with SCOPE', async () => {
+  it('is web UI only: a token holding github:write is refused with UI_ONLY', async () => {
     const token = await tokenOf(alice.id, ['github:write']);
     for (const [method, url, body] of [
       ['post', `${BASE}/connect`, {}],
@@ -225,7 +225,7 @@ describe('connecting a GitHub account', () => {
         .set('Authorization', `Token ${token}`)
         .send(body);
       expect(res.status, `${method} ${url}`).toBe(403);
-      expect(res.body.error.code).toBe('SCOPE');
+      expect(res.body.error.code).toBe('UI_ONLY');
     }
   });
 
@@ -238,6 +238,7 @@ describe('connecting a GitHub account', () => {
     const other = await tokenOf(alice.id, ['issues:read']);
     const no = await request(app).get(BASE).set(CSRF).set('Authorization', `Token ${other}`);
     expect(no.status).toBe(403);
+    expect(no.body.error.code).toBe('SCOPE');
   });
 });
 

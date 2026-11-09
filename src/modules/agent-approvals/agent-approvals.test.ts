@@ -300,6 +300,7 @@ describe('agent approvals', () => {
       const strangerToken = await tokenHeaderFor(other, undefined, 'stranger-agent');
       const byPath = await deleteIssue(issue.number, strangerToken);
       expect(byPath.status).toBe(403);
+      expect(byPath.body.error.code).toBe('FORBIDDEN');
       const byKey = await act(strangerToken, {
         action: 'issue.delete',
         key: `${ctx.projectPrefix}-${issue.number}`,
@@ -634,6 +635,7 @@ describe('agent approvals', () => {
         expect(res.status).toBe(200);
         expect(res.body.status).toBe('FAILED');
         expect(res.body.error.status).toBe(403);
+        expect(res.body.error.code).toBe('FORBIDDEN');
         expect(await prisma.issue.findUnique({ where: { id: issue.id } })).not.toBeNull();
       } finally {
         await prisma.teamMembership.updateMany({
@@ -650,6 +652,7 @@ describe('agent approvals', () => {
       const res = await approve(id);
       expect(res.body.status).toBe('FAILED');
       expect(res.body.error.status).toBe(403);
+      expect(res.body.error.code).toBe('TOKEN_REVOKED');
       expect(runs).toEqual([]);
     });
 
@@ -663,6 +666,7 @@ describe('agent approvals', () => {
       const res = await approve(id);
       expect(res.body.status).toBe('FAILED');
       expect(res.body.error.status).toBe(403);
+      expect(res.body.error.code).toBe('TOKEN_REVOKED');
       expect(runs).toEqual([]);
     });
 
@@ -676,6 +680,7 @@ describe('agent approvals', () => {
       const res = await approve(id);
       expect(res.body.status).toBe('FAILED');
       expect(res.body.error.status).toBe(403);
+      expect(res.body.error.code).toBe('SCOPE');
       expect(runs).toEqual([]);
     });
 
@@ -695,8 +700,10 @@ describe('agent approvals', () => {
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('UI_ONLY');
       const viaAct = await act(ownerToken, { action: 'agentApproval.approve', input: { id } });
       expect(viaAct.status).toBe(403);
+      expect(viaAct.body.error.code).toBe('UI_ONLY');
       expect(runs).toEqual([]);
     });
 
@@ -747,6 +754,7 @@ describe('agent approvals', () => {
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest');
       expect(viaToken.status).toBe(403);
+      expect(viaToken.body.error.code).toBe('UI_ONLY');
     });
   });
 
@@ -1361,8 +1369,12 @@ describe('agent approvals', () => {
     it('wait and get need approvals:read', async () => {
       const id = await pendingOn('scoped');
       const narrow = await tokenHeaderFor(owner, ['issues:write'], 'narrow');
-      const res = await request(app).get(`/api/agent-approvals/${id}`).set('Authorization', narrow);
+      const res = await request(app)
+        .get(`/api/agent-approvals/${id}`)
+        .set('Authorization', narrow)
+        .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('SCOPE');
     });
 
     it('shows a token only what it asked, and a session all of the user', async () => {
@@ -1467,6 +1479,7 @@ describe('agent approvals', () => {
           .set('X-Requested-With', 'XMLHttpRequest')
           .send({ eventType: 'agent:approval', ...body });
         expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe('SCOPE');
       }
       const pref = await prisma.notificationPreference.findUniqueOrThrow({
         where: { userId_eventType: { userId: owner.id, eventType: 'agent:approval' } },
@@ -1487,6 +1500,7 @@ describe('agent approvals', () => {
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest');
       expect(one.status).toBe(403);
+      expect(one.body.error.code).toBe('SCOPE');
       const all = await request(app)
         .post('/api/notifications/read-all')
         .set('Authorization', ownerToken)

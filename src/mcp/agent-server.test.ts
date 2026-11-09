@@ -853,6 +853,9 @@ describe('MCP server', () => {
         body: JSON.stringify({ action: 'org.list' }),
       });
       expect(act.status).toBe(403);
+      expect(((await act.json()) as { error: { code: string } }).error.code).toBe(
+        'CSRF_HEADER_MISSING',
+      );
     });
 
     it('refuses a foreign Origin ahead of everything, and allows none or the site', async () => {
@@ -873,9 +876,11 @@ describe('MCP server', () => {
         expect(
           (await rawPost(INITIALIZE, { ...auth, Origin: 'https://axiom.example' })).status,
         ).toBe(200);
-        expect(
-          (await rawPost(INITIALIZE, { ...auth, Origin: 'http://localhost:7000' })).status,
-        ).toBe(403);
+        const foreign = await rawPost(INITIALIZE, { ...auth, Origin: 'http://localhost:7000' });
+        expect(foreign.status).toBe(403);
+        expect(((await foreign.json()) as { error: { code: string } }).error.code).toBe(
+          'INVALID_ORIGIN',
+        );
         expect((await rawPost(INITIALIZE, auth)).status).toBe(200);
       } finally {
         vi.unstubAllEnvs();
@@ -2369,16 +2374,20 @@ describe('MCP server', () => {
       const { data } = await callTool(c, 'describe');
       const names = (data as Array<{ name: string }>).map((a) => a.name);
       expect(names).toContain('issue.get');
-      for (const action of ['test.mcpUiOnly', 'test.mcpTokenBlocked']) {
+      for (const [action, code] of [
+        ['test.mcpUiOnly', 'UI_ONLY'],
+        ['test.mcpTokenBlocked', 'TOKEN_BLOCKED'],
+      ]) {
         expect(names).not.toContain(action);
-        expectRefused(await callTool(c, 'describe', { action }), 403, 'SCOPE');
-        expectRefused(await callTool(c, 'act', { action }), 403, 'SCOPE');
+        expectRefused(await callTool(c, 'describe', { action }), 403, code);
+        expectRefused(await callTool(c, 'act', { action }), 403, code);
       }
 
       // A session names actions on /api/act: uiOnly stays for its own routes, with their limiters,
       // while tokenBlocked is a normal action for a session
       const uiOnly = await authPost('/api/act', ctx.owner.token, { action: 'test.mcpUiOnly' });
       expect(uiOnly.status).toBe(403);
+      expect(uiOnly.body.error.code).toBe('UI_ONLY');
       const blocked = await authPost('/api/act', ctx.owner.token, {
         action: 'test.mcpTokenBlocked',
       });

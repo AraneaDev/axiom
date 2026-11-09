@@ -491,6 +491,7 @@ describe('githubRepo.link by a token', () => {
       .set(tokenHeaders(raw))
       .send({ repo: WIDGET });
     expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
     expect(fake.requests).toEqual([]);
   });
 

@@ -219,7 +219,7 @@ describe('service accounts: create, list, owners, delete', () => {
       .set(XHR)
       .send({ username: 'acme-token-bot', displayName: 'Token bot', ownerIds: [member.id] });
     expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('SCOPE');
+    expect(res.body.error.code).toBe('UI_ONLY');
     expect(await prisma.user.count({ where: { username: 'acme-token-bot' } })).toBe(0);
   });
 

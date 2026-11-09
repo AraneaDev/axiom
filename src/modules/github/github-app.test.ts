@@ -126,7 +126,7 @@ describe('starting the manifest flow', () => {
       .set('Authorization', `Token ${token}`)
       .send({});
     expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('SCOPE');
+    expect(res.body.error.code).toBe('UI_ONLY');
     for (const name of [
       'githubApp.startManifest',
       'githubApp.completeManifest',
@@ -481,12 +481,13 @@ describe('the status', () => {
   it('is open to a token with github:read, and to none without it', async () => {
     await seedGithubApp();
     const read = await tokenOf(member.id, ['github:read']);
-    const ok = await request(app).get(BASE).set('Authorization', `Token ${read}`);
+    const ok = await request(app).get(BASE).set(CSRF).set('Authorization', `Token ${read}`);
     expect(ok.status).toBe(200);
     expect(ok.body.configured).toBe(true);
     const wrong = await tokenOf(member.id, ['issues:read']);
-    const no = await request(app).get(BASE).set('Authorization', `Token ${wrong}`);
+    const no = await request(app).get(BASE).set(CSRF).set('Authorization', `Token ${wrong}`);
     expect(no.status).toBe(403);
+    expect(no.body.error.code).toBe('SCOPE');
   });
 
   it('is listed in token-reach with the five actions', () => {

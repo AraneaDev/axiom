@@ -555,7 +555,7 @@ describe('REST adapter', () => {
         .set(CSRF)
         .set('Authorization', token);
       expect(refused.status).toBe(403);
-      expect(refused.body.error.code).toBe('SCOPE');
+      expect(refused.body.error.code).toBe('TOKEN_BLOCKED');
 
       const allowed = await request(app)
         .post('/api/rest-test/token-blocked')
